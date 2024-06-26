@@ -1,0 +1,87 @@
+import hashlib
+import re
+import numpy as np
+import pandas as pd
+from dateutil import parser
+
+
+def clean_float(dirty_float):
+    if dirty_float is None:
+        return
+    dirty_float = str(dirty_float)
+    cleaned = dirty_float.replace(',', '').replace('$', '').replace('%', '')
+    return float(cleaned)
+
+
+def clean_date(dirty_date):
+    if dirty_date is None or dirty_date is np.nan:
+        return
+    dirty_date = str(dirty_date).strip()
+    return parser.parse(dirty_date)
+
+
+def clean_int(dirty_int):
+    if dirty_int is None or dirty_int is np.nan:
+        return
+    if dirty_int == int(dirty_int):
+        return int(dirty_int)
+    raise ValueError
+
+
+def hash_str(not_hashed):
+    hashed = hashlib.sha1(str(not_hashed).encode())
+    return hashed.hexdigest()
+
+
+class Cleaner:
+
+    @staticmethod
+    def column_names_to_snake_case(df: pd.DataFrame):
+        column_names = df.columns.to_list()
+        clean_names = []
+        for name in column_names:
+            # Remove / Replace non-alpha-numeric characters
+            name = (str(name)
+                    .strip()
+                    .replace('?', '')
+                    .replace('(', '')
+                    .replace(')', '')
+                    .replace('\\', '')
+                    .replace(',', '')
+                    .replace(' ', '')
+                    .replace('#', 'Num'))
+            # add in underscore before a capital letter or number
+            name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+            name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name)
+            # replace other word-splitters with underscores
+            name = (name
+                    .replace('.', '_')
+                    .replace(':', '_')
+                    .replace(' ', '_')
+                    .replace('-', '_')
+                    .replace('___', '_')
+                    .replace('__', '_')
+                    .strip('_'))
+            clean_names.append(name)
+        df.columns = clean_names
+
+    @staticmethod
+    def switch_nan_to_none(df: pd.DataFrame):
+        return df.replace({np.nan: None})
+
+    @staticmethod
+    def generate_hash_column(df: pd.DataFrame, columns_to_hash: list[str], new_column_name: str):
+        df[new_column_name] = ""
+        for column in columns_to_hash:
+            df[new_column_name] += df[column].apply(str)
+        df[new_column_name] = df[new_column_name].apply(hash_str)
+        return df
+
+    @staticmethod
+    def coalesce_columns(df: pd.DataFrame, columns_to_coalesce: list[str], new_column_name: str, drop: bool = False):
+        df[new_column_name] = df[columns_to_coalesce[1]]
+        for column in columns_to_coalesce:
+            df[new_column_name] = df[new_column_name].combine_first(df[column])
+        if drop:
+            df = df.drop(columns=columns_to_coalesce)
+        return df
