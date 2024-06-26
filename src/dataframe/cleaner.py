@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from dateutil import parser
 
+from src.utils.clean_bool import clean_bool
+
 
 def clean_float(dirty_float):
     if dirty_float is None:
@@ -68,6 +70,35 @@ class Cleaner:
     @staticmethod
     def switch_nan_to_none(df: pd.DataFrame):
         return df.replace({np.nan: None})
+
+    @staticmethod
+    def clean_numbers(df: pd.DataFrame):
+        for column, values in df.items():
+            try:
+                df[column] = values.apply(clean_float)
+                print(f'{column} has been cast to float')
+                df[column] = values.apply(clean_int)
+                print(f'{column} has been cast to int')
+            except (ValueError, TypeError):
+                continue
+
+    @staticmethod
+    def clean_dates(df: pd.DataFrame):
+        for column, values in df.items():
+            try:
+                df[column] = values.apply(clean_date)
+                print(f'{column} has been cast to datetime')
+            except (parser.ParserError, OverflowError):
+                continue
+
+    @staticmethod
+    def clean_bools(df: pd.DataFrame):
+        for column, values in df.items():
+            try:
+                df[column] = values.apply(clean_bool)
+                print(f'{column} has been cast to bool')
+            except ValueError:
+                continue
 
     @staticmethod
     def generate_hash_column(df: pd.DataFrame, columns_to_hash: list[str], new_column_name: str):
