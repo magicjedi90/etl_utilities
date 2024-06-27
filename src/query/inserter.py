@@ -3,10 +3,11 @@ class Inserter:
     def merge_mssql(source_schema: str, source_table: str, target_schema: str, target_table: str, columns: list[str],
                     id_column: str, delete_unmatched: bool = True):
         stage = f'{source_schema}.{source_table}'
+        id_column = f'[{id_column}]'
         location = f'{target_schema}.{target_table}'
         clean_columns = [f'[{column}]' for column in columns]
         source_columns = ', '.join([f'b.{column}' for column in clean_columns])
-        column_string = ','.join(clean_columns)
+        column_string = ', '.join(clean_columns)
         update_check = ' or '.join(
             [f'a.{column} <> b.{column} or (a.{column} is null and b.{column} is not null) ' for column in
              clean_columns if column != id_column]
