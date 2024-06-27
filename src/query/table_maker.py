@@ -2,8 +2,6 @@ import math
 import pandas as pd
 from dateutil import parser
 
-from src.utils.clean_bool import clean_bool
-
 
 def cast_to_float(dirty_float):
     if dirty_float is None:
@@ -23,6 +21,18 @@ def cast_to_int(dirty_int):
     if dirty_int == int(dirty_int):
         return int(dirty_int)
     raise ValueError
+
+
+def cast_to_bool(dirty_bool):
+    if dirty_bool is None:
+        return
+    dirty_bool = str(dirty_bool).lower()
+    if dirty_bool in ('y', 'yes', 't', 'true', 'on', '1'):
+        return 1
+    elif dirty_bool in ('n', 'no', 'f', 'false', 'off', '0'):
+        return 0
+    else:
+        raise ValueError("invalid truth value %r" % (dirty_bool,))
 
 
 class TableMaker:
@@ -67,7 +77,7 @@ class TableMaker:
             except (ValueError, TypeError):
                 print()
             try:
-                series.apply(clean_bool)
+                series.apply(cast_to_bool)
                 column_string = f'[{column}] bit'
             except ValueError:
                 print()

@@ -4,7 +4,17 @@ import numpy as np
 import pandas as pd
 from dateutil import parser
 
-from src.utils.clean_bool import clean_bool
+
+def clean_bool(dirty_bool):
+    if dirty_bool is None:
+        return
+    dirty_bool = str(dirty_bool).lower()
+    if dirty_bool in ('y', 'yes', 't', 'true', 'on', '1'):
+        return True
+    elif dirty_bool in ('n', 'no', 'f', 'false', 'off', '0'):
+        return False
+    else:
+        raise ValueError("invalid truth value %r" % (dirty_bool,))
 
 
 def clean_float(dirty_float):
@@ -50,11 +60,11 @@ class Cleaner:
                     .replace(')', '')
                     .replace('\\', '')
                     .replace(',', '')
-                    .replace(' ', '')
-                    .replace('#', 'Num'))
+                    .replace('#', 'Num')
+                    .replace('$', 'Dollars'))
             # add in underscore before a capital letter or number
             name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-            name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name)
+            name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
             # replace other word-splitters with underscores
             name = (name
                     .replace('.', '_')
@@ -75,9 +85,10 @@ class Cleaner:
     def clean_numbers(df: pd.DataFrame):
         for column, values in df.items():
             try:
-                df[column] = values.apply(clean_float)
+                clean_floats = values.apply(clean_float)
+                df[column] = clean_floats
                 print(f'{column} has been cast to float')
-                df[column] = values.apply(clean_int)
+                df[column] = clean_floats.apply(clean_int)
                 print(f'{column} has been cast to int')
             except (ValueError, TypeError):
                 continue
@@ -104,9 +115,10 @@ class Cleaner:
     def clean_all(df: pd.DataFrame):
         for column, values in df.items():
             try:
-                df[column] = values.apply(clean_float)
+                clean_floats = values.apply(clean_float)
+                df[column] = clean_floats
                 print(f'{column} has been cast to float')
-                df[column] = values.apply(clean_int)
+                df[column] = clean_floats.apply(clean_int)
                 print(f'{column} has been cast to int')
             except (ValueError, TypeError):
                 print()
