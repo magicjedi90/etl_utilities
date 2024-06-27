@@ -101,6 +101,27 @@ class Cleaner:
                 continue
 
     @staticmethod
+    def clean_all(df: pd.DataFrame):
+        for column, values in df.items():
+            try:
+                df[column] = values.apply(clean_float)
+                print(f'{column} has been cast to float')
+                df[column] = values.apply(clean_int)
+                print(f'{column} has been cast to int')
+            except (ValueError, TypeError):
+                print()
+            try:
+                df[column] = values.apply(clean_date)
+                print(f'{column} has been cast to datetime')
+            except (parser.ParserError, OverflowError):
+                print()
+            try:
+                df[column] = values.apply(clean_bool)
+                print(f'{column} has been cast to bool')
+            except ValueError:
+                print()
+
+    @staticmethod
     def generate_hash_column(df: pd.DataFrame, columns_to_hash: list[str], new_column_name: str):
         df[new_column_name] = ""
         for column in columns_to_hash:
