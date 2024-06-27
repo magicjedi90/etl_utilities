@@ -43,7 +43,7 @@ class TableMaker:
                 series.apply(cast_to_datetime)
                 column_string = f'[{column}] datetime2'
             except (ValueError, TypeError, OverflowError):
-                print(f'{column} can\'t be a datetime')
+                print()
             try:
                 series.apply(cast_to_float)
                 left_digits = int(math.log10(series.max())) + 1
@@ -51,7 +51,7 @@ class TableMaker:
                     float_precision = left_digits + decimal_places
                 column_string = f'[{column}] decimal({float_precision}, {decimal_places})'
             except (ValueError, TypeError):
-                print(f'{column} can\'t be a float')
+                print()
             try:
                 series.apply(cast_to_int)
                 biggest_num = series.max()
@@ -65,12 +65,12 @@ class TableMaker:
                 if smallest_num >= 0 and biggest_num <= 255:
                     column_string = f'[{column}] tinyint'
             except (ValueError, TypeError):
-                print(f'{column} can\'t be an int')
+                print()
             try:
                 series.apply(clean_bool)
                 column_string = f'[{column}] bit'
             except ValueError:
-                print(f'{column} can\'t be a boolean')
+                print()
             if column_string is None:
                 largest_string_size = df[column].str.len().max()
                 padded_length = int(largest_string_size + varchar_padding)
