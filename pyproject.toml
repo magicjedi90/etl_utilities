@@ -50,8 +50,8 @@ omit = [
 ]
 
 [tool.coverage.paths]
-etl_tools = ["src/etl_tools", "*/etl-tools/src/etl_tools"]
-tests = ["tests", "*/etl-tools/tests"]
+etl_tools = ["src/etl_tools", "*/etl_tools/src/etl_tools"]
+tests = ["tests", "*/etl_tools/tests"]
 
 [tool.coverage.report]
 exclude_lines = [

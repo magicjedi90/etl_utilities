@@ -78,7 +78,7 @@ df = pd.DataFrame({'MixedCase': [1, 2], 'with spaces': [3, 4]})
 Cleaner.column_names_to_snake_case(df)
 print(df.columns)  # Output: ['mixed_Case', 'with_spaces']
 ```
-#### `Cleaner.switch_nan_to_none(df)'
+#### `Cleaner.switch_nan_to_none(df)`
 
 Replaces NaN values with None in a DataFrame.
 
@@ -124,8 +124,8 @@ df = pd.DataFrame({'id': [1, 2, 3], 'name': ['Alice', 'Bob', 'Alice']})
 candidates = Analyzer.find_single_id_candidate_columns(df)
 print(candidates)  # Output: ['id']
 
-Analyzer.find_id_pair_candidates(df)
 ```
+#### `Analyzer.find_id_pair_candidates(df)`
 Finds pairs of columns that can serve as unique identifiers.
 
 ```python
@@ -136,7 +136,7 @@ df = pd.DataFrame({'first': [1, 2, 2], 'second': [3, 3, 4]})
 candidates = Analyzer.find_id_pair_candidates(df)
 print(candidates)  # Output: [('first', 'second')]
 ```
-### TableMaker Class
+### Maker Class
 
 Generates SQL queries for creating tables.
 #### `TableMaker.make_mssql_table(df, schema, table, primary_key=None, history=False, varchar_padding=20, float_precision=10, decimal_places=2)`
