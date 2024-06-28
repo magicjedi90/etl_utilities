@@ -3,7 +3,7 @@ import unittest
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from src.dataframe.cleaner import clean_float, clean_date, clean_int, hash_str, Cleaner
+from src.etl_tools.dataframe.cleaner import clean_float, clean_date, clean_int, hash_str, Cleaner
 
 
 class TestCleanFunctions(unittest.TestCase):

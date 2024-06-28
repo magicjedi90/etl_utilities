@@ -1,5 +1,5 @@
 import unittest
-from src.query.inserter import Inserter
+from src.etl_tools.query.inserter import Inserter
 
 
 class TestInserter(unittest.TestCase):

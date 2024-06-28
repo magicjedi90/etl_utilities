@@ -1,6 +1,6 @@
 import unittest
 import pandas as pd
-from src.dataframe.analyzer import Analyzer
+from src.etl_tools.dataframe.analyzer import Analyzer
 
 
 class TestAnalyzer(unittest.TestCase):
