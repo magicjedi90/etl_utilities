@@ -1,7 +1,7 @@
 import unittest
 import pandas as pd
 from datetime import datetime
-from src.etl_tools.query.maker import cast_to_float, cast_to_datetime, cast_to_int, Maker
+from src.etl.query.maker import cast_to_float, cast_to_datetime, cast_to_int, Maker
 
 
 class TestCastingFunctions(unittest.TestCase):
