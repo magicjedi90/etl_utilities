@@ -25,7 +25,7 @@ This repository provides a collection of utility functions and classes for data 
 Cleans a float by removing unwanted characters and converting it to a float type.
 
 ```python
-from your_module import clean_float
+from etl.dataframe.cleaner import clean_float
 
 cleaned_float = clean_float('$1,234.56')
 print(cleaned_float)  # Output: 1234.56
@@ -36,7 +36,7 @@ print(cleaned_float)  # Output: 1234.56
 
 Parses a date string and converts it to a datetime object.
 ```python
-from your_module import clean_date
+from etl.dataframe.cleaner import clean_date
 
 cleaned_date = clean_date('2021-01-01')
 print(cleaned_date)  # Output: 2021-01-01 00:00:00
@@ -46,7 +46,7 @@ print(cleaned_date)  # Output: 2021-01-01 00:00:00
 
 Cleans an integer by removing unwanted characters and converting it to an integer type.
 ```python
-from your_module import clean_int
+from etl.dataframe.cleaner import clean_int
 
 cleaned_int = clean_int('123.00')
 print(cleaned_int)  # Output: 123
@@ -57,7 +57,7 @@ print(cleaned_int)  # Output: 123
 Hashes a string using SHA-1.
 
 ```python
-from your_module import hash_str
+from etl.dataframe.cleaner import hash_str
 
 hashed_value = hash_str('test')
 print(hashed_value)  # Output: a94a8fe5ccb19ba61c4c0873d391e987982fbbd3```
@@ -72,7 +72,7 @@ Converts column names in a DataFrame to snake_case.
 
 ```python
 import pandas as pd
-from your_module import Cleaner
+from etl.dataframe.cleaner import Cleaner
 
 df = pd.DataFrame({'MixedCase': [1, 2], 'with spaces': [3, 4]})
 Cleaner.column_names_to_snake_case(df)
@@ -85,7 +85,7 @@ Replaces NaN values with None in a DataFrame.
 ```python
 import pandas as pd
 import numpy as np
-from your_module import Cleaner
+from etl.dataframe.cleaner import Cleaner
 
 df = pd.DataFrame({'column1': [1, np.nan, 3]})
 df = Cleaner.switch_nan_to_none(df)
@@ -118,7 +118,7 @@ Finds columns that can serve as unique identifiers.
 
 ```python
 import pandas as pd
-from your_module import Analyzer
+from etl.dataframe.analyzer import Analyzer
 
 df = pd.DataFrame({'id': [1, 2, 3], 'name': ['Alice', 'Bob', 'Alice']})
 candidates = Analyzer.find_single_id_candidate_columns(df)
@@ -130,7 +130,7 @@ Finds pairs of columns that can serve as unique identifiers.
 
 ```python
 import pandas as pd
-from your_module import Analyzer
+from etl.dataframe.analyzer import Analyzer
 
 df = pd.DataFrame({'first': [1, 2, 2], 'second': [3, 3, 4]})
 candidates = Analyzer.find_id_pair_candidates(df)
@@ -139,7 +139,7 @@ print(candidates)  # Output: [('first', 'second')]
 ### Maker Class
 
 Generates SQL queries for creating tables.
-#### `TableMaker.make_mssql_table(df, schema, table, primary_key=None, history=False, varchar_padding=20, float_precision=10, decimal_places=2)`
+#### `Maker.make_mssql_table(df, schema, table, primary_key=None, history=False, varchar_padding=20, float_precision=10, decimal_places=2)`
 
 Generates a SQL CREATE TABLE statement based on a DataFrame.
 ### Inserter Class
