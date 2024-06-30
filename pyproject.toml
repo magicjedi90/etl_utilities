@@ -27,9 +27,9 @@ classifiers = [
 dependencies = ["numpy", "pandas", "python_dateutil", "SQLAlchemy"]
 
 [project.urls]
-Documentation = "https://github.com/magicjedi90/etl#readme"
-Issues = "https://github.com/magicjedi90/etl/issues"
-Source = "https://github.com/magicjedi90/etl"
+Documentation = "https://github.com/magicjedi90/etl_utilities#readme"
+Issues = "https://github.com/magicjedi90/etl_utilities/issues"
+Source = "https://github.com/magicjedi90/etl_utilities"
 
 [tool.hatch.version]
 path = "src/etl/__about__.py"
