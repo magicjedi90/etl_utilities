@@ -121,17 +121,17 @@ class Cleaner:
                 df[column] = clean_floats.apply(clean_int)
                 print(f'{column} has been cast to int')
             except (ValueError, TypeError):
-                print()
+                pass
             try:
                 df[column] = values.apply(clean_date)
                 print(f'{column} has been cast to datetime')
             except (parser.ParserError, OverflowError):
-                print()
+                pass
             try:
                 df[column] = values.apply(clean_bool)
                 print(f'{column} has been cast to bool')
             except ValueError:
-                print()
+                pass
 
     @staticmethod
     def generate_hash_column(df: pd.DataFrame, columns_to_hash: list[str], new_column_name: str):
