@@ -89,6 +89,7 @@ class Cleaner:
                 print(f'{column} has been cast to int')
             except (ValueError, TypeError):
                 continue
+        return df
 
     @staticmethod
     def clean_dates(df: pd.DataFrame):
@@ -98,6 +99,7 @@ class Cleaner:
                 print(f'{column} has been cast to datetime')
             except (parser.ParserError, OverflowError):
                 continue
+        return df
 
     @staticmethod
     def clean_bools(df: pd.DataFrame):
@@ -107,6 +109,7 @@ class Cleaner:
                 print(f'{column} has been cast to bool')
             except ValueError:
                 continue
+        return df
 
     @staticmethod
     def clean_all(df: pd.DataFrame):
@@ -129,6 +132,7 @@ class Cleaner:
                 print(f'{column} has been cast to bool')
             except ValueError:
                 pass
+        return df
 
     @staticmethod
     def generate_hash_column(df: pd.DataFrame, columns_to_hash: list[str], new_column_name: str):

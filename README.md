@@ -78,19 +78,8 @@ df = pd.DataFrame({'MixedCase': [1, 2], 'with spaces': [3, 4]})
 Cleaner.column_names_to_snake_case(df)
 print(df.columns)  # Output: ['mixed_Case', 'with_spaces']
 ```
-#### `Cleaner.switch_nan_to_none(df)`
 
-Replaces NaN values with None in a DataFrame.
 
-```python
-import pandas as pd
-import numpy as np
-from etl.dataframe.cleaner import Cleaner
-
-df = pd.DataFrame({'column1': [1, np.nan, 3]})
-df = Cleaner.switch_nan_to_none(df)
-print(df)  # Output: column1: [1, None, 3]
-```
 #### `Cleaner.clean_numbers(df)`
 
 Cleans numerical columns in a DataFrame.
