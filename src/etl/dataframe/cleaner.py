@@ -3,6 +3,7 @@ import re
 import numpy as np
 import pandas as pd
 from dateutil import parser
+from rich import print
 
 
 def clean_bool(dirty_bool):

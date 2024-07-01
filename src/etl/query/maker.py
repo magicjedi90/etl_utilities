@@ -1,6 +1,7 @@
 import math
 import pandas as pd
 from dateutil import parser
+from rich import print
 
 
 def cast_to_float(dirty_float):

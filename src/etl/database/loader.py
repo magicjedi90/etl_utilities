@@ -1,5 +1,6 @@
 import pandas as pd
-from progress.bar import Bar
+from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
+from rich import print
 
 
 def insert_to_mssql_db(column_string, cursor, data_list, location, values):
@@ -9,8 +10,6 @@ def insert_to_mssql_db(column_string, cursor, data_list, location, values):
     )
     try:
         cursor.execute(execute_query, data_list)
-        # progress = f'Progress: {total_count} / {total}'
-        # print(progress)
     except Exception as e:
         print(execute_query)
         print(data_list)
@@ -24,12 +23,8 @@ class Loader:
         column_list = [f'[{column}]' for column in column_list]
         column_string = ", ".join(column_list)
         location = f"{schema}.[{table}]"
-        total_count = 0
-        values = []
-        data_list = []
-        data_count = 0
+
         row_values = []
-        total = df.shape[0]
         for column in df.columns:
             str_column = df[column].apply(str)
             max_size = str_column.str.len().max()
@@ -38,20 +33,27 @@ class Loader:
             else:
                 row_values.append('?')
         row_value_list = ", ".join(row_values)
-        progress_bar = Bar('Uploading', max=total)
-        for row in df.itertuples(index=False, name=None):
-            row_size = len(row)
-            total_count += 1
-            data_count += row_size
-            values.append(row_value_list)
+        with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(),
+                      MofNCompleteColumn()) as progress:
+            total = df.shape[0]
+            values = []
+            data_list = []
+            data_count = 0
+            row_count = 0
+            upload_task = progress.add_task(f'loading {table}', total=total)
+            for row in df.itertuples(index=False, name=None):
+                row_size = len(row)
+                row_count += 1
+                data_count += row_size
+                values.append(row_value_list)
 
-            data_list.extend(row)
-            next_size = data_count + row_size
-            if next_size >= 2000:
+                data_list.extend(row)
+                next_size = data_count + row_size
+                if next_size >= 2000:
+                    insert_to_mssql_db(column_string, cursor, data_list, location, values)
+                    progress.update(upload_task, advance=row_count)
+                    values = []
+                    data_list = []
+                    data_count = 0
                 insert_to_mssql_db(column_string, cursor, data_list, location, values)
-                progress_bar.next(data_count)
-                values = []
-                data_list = []
-                data_count = 0
-            insert_to_mssql_db(column_string, cursor, data_list, location, values)
-            progress_bar.finish()
+                progress.update(upload_task, advance=row_count)
