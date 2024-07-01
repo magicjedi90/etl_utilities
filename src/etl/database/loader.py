@@ -57,5 +57,6 @@ class Loader:
                     values = []
                     data_list = []
                     data_count = 0
+                    row_count = 0
             insert_to_mssql_db(column_string, cursor, data_list, location, values)
             progress.update(upload_task, advance=row_count)
