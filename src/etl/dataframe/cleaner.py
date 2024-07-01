@@ -79,10 +79,6 @@ class Cleaner:
         df.columns = clean_names
 
     @staticmethod
-    def switch_nan_to_none(df: pd.DataFrame):
-        return df.replace({np.nan: None})
-
-    @staticmethod
     def clean_numbers(df: pd.DataFrame):
         for column, values in df.items():
             try:

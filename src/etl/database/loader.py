@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
 from rich import print
@@ -19,6 +20,7 @@ def insert_to_mssql_db(column_string, cursor, data_list, location, values):
 class Loader:
     @staticmethod
     def insert_to_mssql_table(cursor, df: pd.DataFrame, schema: str, table: str):
+        df = df.replace({np.nan: None})
         column_list = df.columns.tolist()
         column_list = [f'[{column}]' for column in column_list]
         column_string = ", ".join(column_list)

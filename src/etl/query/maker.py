@@ -1,11 +1,13 @@
 import math
+
+import numpy as np
 import pandas as pd
 from dateutil import parser
 from rich import print
 
 
 def cast_to_float(dirty_float):
-    if dirty_float is None:
+    if dirty_float is None or dirty_float is np.nan:
         return
     return float(dirty_float)
 
@@ -17,7 +19,7 @@ def cast_to_datetime(dirty_date):
 
 
 def cast_to_int(dirty_int):
-    if dirty_int is None:
+    if dirty_int is None or np.isnan(dirty_int):
         return
     if dirty_int == int(dirty_int):
         return int(dirty_int)
@@ -83,7 +85,8 @@ class Maker:
             except ValueError:
                 pass
             if column_string is None:
-                largest_string_size = df[column].str.len().max()
+                str_series = series.apply(str)
+                largest_string_size = str_series.str.len().max()
                 padded_length = int(largest_string_size + varchar_padding)
                 if padded_length >= 8000:
                     column_string = f'[{column}] varchar(max)'
