@@ -34,7 +34,7 @@ def clean_date(dirty_date):
 
 
 def clean_int(dirty_int):
-    if dirty_int is None or dirty_int is np.nan:
+    if dirty_int is None or np.isnan(dirty_int):
         return
     if dirty_int == int(dirty_int):
         return int(dirty_int)
