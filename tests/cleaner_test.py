@@ -50,23 +50,23 @@ class TestCleaner(unittest.TestCase):
             'ints': ['$1,000', '2,000', '3,000'],
             'floats': ['$1,000.55', '2,000.66', '3,000.33']
         })
-        Cleaner.clean_numbers(df)
-        self.assertEqual(df['ints'].dtype, 'int64')
-        self.assertEqual(df['floats'].dtype, 'float64')
+        clean_df = Cleaner.clean_numbers(df)
+        self.assertEqual(clean_df['ints'].dtype, 'int64')
+        self.assertEqual(clean_df['floats'].dtype, 'float64')
 
     def test_clean_dates(self):
         df = pd.DataFrame({
             'dates': ['2021-01-01', '01/02/2021']
         })
-        Cleaner.clean_dates(df)
-        self.assertEqual(df['dates'].dtype, 'datetime64[ns]')
+        clean_df = Cleaner.clean_dates(df)
+        self.assertEqual(clean_df['dates'].dtype, 'datetime64[ns]')
 
     def test_clean_bools(self):
         df = pd.DataFrame({
             'bools': ['yes', 'no', 'true', 'false']
         })
-        Cleaner.clean_bools(df)
-        self.assertEqual(df['bools'].dtype, 'bool')
+        clean_df = Cleaner.clean_bools(df)
+        self.assertEqual(clean_df['bools'].dtype, 'bool')
 
     def test_clean_all(self):
         df = pd.DataFrame({
@@ -74,10 +74,10 @@ class TestCleaner(unittest.TestCase):
             'dates': ['2021-01-01', '01/02/2021', '2021-01-01', '01/02/2021'],
             'bools': ['yes', 'no', 'true', 'false']
         })
-        Cleaner.clean_all(df)
-        self.assertEqual(df['numbers'].dtype, 'int64')
-        self.assertEqual(df['dates'].dtype, 'datetime64[ns]')
-        self.assertEqual(df['bools'].dtype, 'bool')
+        clean_df = Cleaner.clean_all(df)
+        self.assertEqual(clean_df['numbers'].dtype, 'int64')
+        self.assertEqual(clean_df['dates'].dtype, 'datetime64[ns]')
+        self.assertEqual(clean_df['bools'].dtype, 'bool')
 
     def test_generate_hash_column(self):
         df = pd.DataFrame({
