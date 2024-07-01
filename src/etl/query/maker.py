@@ -42,6 +42,7 @@ class Maker:
     @staticmethod
     def make_mssql_table(df: pd.DataFrame, schema: str, table: str, primary_key: str = None, history: bool = False,
                          varchar_padding: int = 20, float_precision: int = 10, decimal_places: int = 2):
+        df = df.replace({np.nan: None})
         location = f'{schema}.[{table}]'
         column_type_list = []
         for column, series in df.items():
