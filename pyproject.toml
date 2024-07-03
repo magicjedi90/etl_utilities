@@ -9,7 +9,7 @@ description = 'This repository provides a collection of utility functions and cl
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
-keywords = ["etl", "pandas", "cleaning", "etl-utilities", "etl_utilities", "database", "dataframe"]
+keywords = ["etl", "pandas", "cleaning", "etl-utilities", "utilities", "database", "dataframe"]
 authors = [
   { name = "Jesse", email = "magicjedi90@aim.com" },
 ]
