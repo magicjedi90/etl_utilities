@@ -49,8 +49,8 @@ class Maker:
             is_id = column.__str__() == primary_key
             column_string = None
             if series.dropna().empty:
-                print(f"{column} is empty - setting to varchar(max)")
-                column_string = f'[{column}] varchar(max)'
+                print(f"{column} is empty - setting to nvarchar(max)")
+                column_string = f'[{column}] nvarchar(max)'
                 column_type_list.append(column_string)
                 continue
             try:
@@ -89,10 +89,10 @@ class Maker:
                 str_series = series.apply(str)
                 largest_string_size = str_series.str.len().max()
                 padded_length = int(largest_string_size + varchar_padding)
-                if padded_length >= 8000:
-                    column_string = f'[{column}] varchar(max)'
+                if padded_length >= 4000:
+                    column_string = f'[{column}] nvarchar(max)'
                 else:
-                    column_string = f'[{column}] varchar({padded_length})'
+                    column_string = f'[{column}] nvarchar({padded_length})'
             if is_id:
                 column_string += f' constraint pk_{table}_{column} primary key'
             column_type_list.append(column_string)

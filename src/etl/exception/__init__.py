@@ -1,0 +1,2 @@
+class ExtraColumnsException(Exception):
+    pass
