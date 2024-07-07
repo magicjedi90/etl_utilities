@@ -1,8 +1,18 @@
+import math
+
 import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
 from rich import print
-from ..exception import ExtraColumnsException
+from ..exception import ExtraColumnsException, ColumnDataException
+
+MSSQL_INT_TYPES = ['bigint', 'int', 'smallint', 'tinyint']
+MSSQL_FLOAT_TYPES = ['decimal', 'numeric']
+MSSQL_STR_TYPES = ['varchar', 'nvarchar', 'char', 'nchar']
+MSSQL_DATE_TYPES = ['date', 'datetime', 'datetime2']
+NUMPY_INT_TYPES = [np.int_, np.int64, np.int32, np.int8]
+NUMPY_FLOAT_TYPES = [np.float64, np.float32, np.float16, np.float80, np.float96, np.float128, np.float256]
+NUMPY_STR_TYPES = [np.str_, np.object_]
 
 
 def insert_to_mssql_db(column_string, cursor, data_list, location, values):
@@ -76,15 +86,56 @@ class Loader:
         new_columns = np.setdiff1d(df_columns, db_columns)
         if len(new_columns) > 0:
             extra_columns_string = ", ".join(new_columns)
-            error_message = f'The table {schema}.{table} is missing the following columns: {extra_columns_string} '
-            raise ExtraColumnsException(error_message)
+            type_mismatch_error_message = \
+                f'The table {schema}.{table} is missing the following columns: {extra_columns_string} '
+            raise ExtraColumnsException(type_mismatch_error_message)
         # make sure column types match up
+        type_mismatch_columns = []
+        truncated_columns = []
         for column in df_columns:
             db_column_info = column_info_df[column_info_df['column_name'] == column]
-            db_column_data_type = db_column_info.iloc[0]['DATA_TYPE']
+            db_column_data_type = db_column_info.iloc[0]['data_type']
             df_column_data_type = df[column].dtype
-            db_column_string_length = db_column_info.iloc[0]['character_maximum_length']
             db_column_numeric_precision = db_column_info.iloc[0]['numerical_precision']
-            df_max_string_length = df[column].str.len().max()
+            db_column_string_length = db_column_info.iloc[0]['character_maximum_length']
+            type_mismatch_error_message = (f'{column} in dataframe is of type {df_column_data_type} '
+                                           f'while the database expects a type of {db_column_data_type}')
+            if df_column_data_type in NUMPY_INT_TYPES:
+                if db_column_data_type not in MSSQL_INT_TYPES:
+                    type_mismatch_columns.append(type_mismatch_error_message)
+                    continue
+                df_numeric_precision = int(math.log10(df[column].max())) + 1
+                if df_numeric_precision > db_column_numeric_precision:
+                    truncate_error_message = (f'{column} needs a minimum of {df_numeric_precision} '
+                                              f'precision to be inserted')
+                    truncated_columns.append(truncate_error_message)
+                    continue
 
-        # make sure no truncation happens
+            elif df_column_data_type in NUMPY_FLOAT_TYPES:
+                if db_column_data_type not in MSSQL_FLOAT_TYPES:
+                    type_mismatch_columns.append(type_mismatch_error_message)
+                    continue
+                df_numeric_precision = int(math.log10(df[column].max())) + 1
+                if df_numeric_precision > db_column_numeric_precision:
+                    truncate_error_message = (f'{column} needs a minimum of {df_numeric_precision} '
+                                              f'precision to be inserted')
+                    truncated_columns.append(truncate_error_message)
+                    continue
+
+            elif df_column_data_type is np.datetime64:
+                if db_column_data_type not in MSSQL_DATE_TYPES:
+                    type_mismatch_columns.append(type_mismatch_error_message)
+                    continue
+            elif df_column_data_type in NUMPY_STR_TYPES:
+                if db_column_data_type not in MSSQL_STR_TYPES:
+                    type_mismatch_columns.append(type_mismatch_error_message)
+                    continue
+                df_max_string_length = df[column].str.len().max()
+                if df_max_string_length > db_column_string_length:
+                    truncate_error_message = (f'{column} needs a minimum of {df_max_string_length} '
+                                              f'size to be inserted')
+                    truncated_columns.append(truncate_error_message)
+                    continue
+        if len(truncated_columns) > 0 or len(type_mismatch_columns) > 0:
+            error_message = '\n'.join(type_mismatch_columns) + '\n'.join(truncated_columns)
+            raise ColumnDataException(error_message)
