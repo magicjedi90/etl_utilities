@@ -10,7 +10,7 @@ MSSQL_FLOAT_TYPES = ['decimal', 'numeric']
 MSSQL_STR_TYPES = ['varchar', 'nvarchar', 'char', 'nchar']
 MSSQL_DATE_TYPES = ['date', 'datetime', 'datetime2']
 NUMPY_INT_TYPES = [np.int_, np.int64, np.int32, np.int8]
-NUMPY_FLOAT_TYPES = [np.float64, np.float32, np.float16, np.float128]
+NUMPY_FLOAT_TYPES = [np.float64, np.float32, np.float16]
 NUMPY_STR_TYPES = [np.str_, np.object_]
 NUMPY_BOOL_TYPES = [np.bool_, np.True_, np.False_, pd.BooleanDtype, 'boolean']
 
