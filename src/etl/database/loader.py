@@ -1,5 +1,4 @@
 import math
-
 import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
@@ -13,6 +12,7 @@ NUMPY_INT_TYPES = [np.int_, np.int64, np.int32, np.int8, 'Int64']
 NUMPY_FLOAT_TYPES = [np.float64, np.float32, np.float16, 'Float64']
 NUMPY_STR_TYPES = [np.str_, np.object_, 'string']
 NUMPY_BOOL_TYPES = [np.bool_, np.True_, np.False_, pd.BooleanDtype, 'boolean']
+NUMPY_DATE_TYPES = [np.datetime64, 'datetime64[ns]']
 
 
 def insert_to_mssql_db(column_string, cursor, data_list, location, values):
@@ -127,7 +127,7 @@ class Loader:
                     truncated_columns.append(truncate_error_message)
                     continue
 
-            elif df_column_data_type is np.datetime64:
+            elif df_column_data_type in NUMPY_DATE_TYPES:
                 if db_column_data_type not in MSSQL_DATE_TYPES:
                     type_mismatch_columns.append(type_mismatch_error_message)
                     continue
