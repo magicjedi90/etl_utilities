@@ -6,12 +6,12 @@ from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, M
 from rich import print
 
 MSSQL_INT_TYPES = ['bigint', 'int', 'smallint', 'tinyint']
-MSSQL_FLOAT_TYPES = ['decimal', 'numeric']
+MSSQL_FLOAT_TYPES = ['decimal', 'numeric', 'float']
 MSSQL_STR_TYPES = ['varchar', 'nvarchar', 'char', 'nchar']
 MSSQL_DATE_TYPES = ['date', 'datetime', 'datetime2']
-NUMPY_INT_TYPES = [np.int_, np.int64, np.int32, np.int8]
-NUMPY_FLOAT_TYPES = [np.float64, np.float32, np.float16]
-NUMPY_STR_TYPES = [np.str_, np.object_]
+NUMPY_INT_TYPES = [np.int_, np.int64, np.int32, np.int8, 'Int64']
+NUMPY_FLOAT_TYPES = [np.float64, np.float32, np.float16, 'Float64']
+NUMPY_STR_TYPES = [np.str_, np.object_, 'string']
 NUMPY_BOOL_TYPES = [np.bool_, np.True_, np.False_, pd.BooleanDtype, 'boolean']
 
 
@@ -39,14 +39,16 @@ class Loader:
         row_values = []
         for column in df.columns:
             series = df[column]
-            if df[column].dtype in NUMPY_BOOL_TYPES:
-                df[column] = series.astype(str)
+            series_type = series.dtype
             str_column = series.apply(str)
             max_size = str_column.str.len().max()
             if max_size > 256:
                 row_values.append('cast ( ? as nvarchar(max))')
             else:
                 row_values.append('?')
+            # switches from numpy class to python class for bool float and int
+            if series_type in NUMPY_BOOL_TYPES or series_type in NUMPY_INT_TYPES or series_type in NUMPY_FLOAT_TYPES:
+                df[column] = series.tolist()
         row_value_list = ", ".join(row_values)
         df = df.replace({np.nan: None})
         with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(),
