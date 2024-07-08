@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
 from rich import print
-from src.etl.exception import ExtraColumnsException, ColumnDataException
 
 MSSQL_INT_TYPES = ['bigint', 'int', 'smallint', 'tinyint']
 MSSQL_FLOAT_TYPES = ['decimal', 'numeric']
@@ -143,3 +142,11 @@ class Loader:
         if len(truncated_columns) > 0 or len(type_mismatch_columns) > 0:
             error_message = '\n'.join(type_mismatch_columns) + '\n'.join(truncated_columns)
             raise ColumnDataException(error_message)
+
+
+class ExtraColumnsException(Exception):
+    pass
+
+
+class ColumnDataException(Exception):
+    pass
