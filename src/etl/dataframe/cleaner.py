@@ -132,6 +132,7 @@ class Cleaner:
                 print(f'{column} has been cast to bool')
             except ValueError:
                 pass
+        df = df.convert_dtypes()
         return df
 
     @staticmethod

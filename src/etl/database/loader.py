@@ -4,15 +4,16 @@ import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
 from rich import print
-from ..exception import ExtraColumnsException, ColumnDataException
+from src.etl.exception import ExtraColumnsException, ColumnDataException
 
 MSSQL_INT_TYPES = ['bigint', 'int', 'smallint', 'tinyint']
 MSSQL_FLOAT_TYPES = ['decimal', 'numeric']
 MSSQL_STR_TYPES = ['varchar', 'nvarchar', 'char', 'nchar']
 MSSQL_DATE_TYPES = ['date', 'datetime', 'datetime2']
 NUMPY_INT_TYPES = [np.int_, np.int64, np.int32, np.int8]
-NUMPY_FLOAT_TYPES = [np.float64, np.float32, np.float16, np.float80, np.float96, np.float128, np.float256]
+NUMPY_FLOAT_TYPES = [np.float64, np.float32, np.float16, np.float128]
 NUMPY_STR_TYPES = [np.str_, np.object_]
+NUMPY_BOOL_TYPES = [np.bool_, np.True_, np.False_, pd.BooleanDtype, 'boolean']
 
 
 def insert_to_mssql_db(column_string, cursor, data_list, location, values):
@@ -31,7 +32,6 @@ def insert_to_mssql_db(column_string, cursor, data_list, location, values):
 class Loader:
     @staticmethod
     def insert_to_mssql_table(cursor, df: pd.DataFrame, schema: str, table: str):
-        df = df.replace({np.nan: None})
         column_list = df.columns.tolist()
         column_list = [f'[{column}]' for column in column_list]
         column_string = ", ".join(column_list)
@@ -39,13 +39,17 @@ class Loader:
 
         row_values = []
         for column in df.columns:
-            str_column = df[column].apply(str)
+            series = df[column]
+            if df[column].dtype in NUMPY_BOOL_TYPES:
+                df[column] = series.astype(str)
+            str_column = series.apply(str)
             max_size = str_column.str.len().max()
             if max_size > 256:
                 row_values.append('cast ( ? as nvarchar(max))')
             else:
                 row_values.append('?')
         row_value_list = ", ".join(row_values)
+        df = df.replace({np.nan: None})
         with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(),
                       MofNCompleteColumn()) as progress:
             total = df.shape[0]
@@ -82,7 +86,7 @@ class Loader:
         column_info_df = pd.read_sql(get_column_info_query, connection)
         # make sure df doesn't have any extra columns
         df_columns = df.columns.tolist()
-        db_columns = column_info_df['column_name'].tolist()
+        db_columns = column_info_df['COLUMN_NAME'].tolist()
         new_columns = np.setdiff1d(df_columns, db_columns)
         if len(new_columns) > 0:
             extra_columns_string = ", ".join(new_columns)
@@ -93,11 +97,11 @@ class Loader:
         type_mismatch_columns = []
         truncated_columns = []
         for column in df_columns:
-            db_column_info = column_info_df[column_info_df['column_name'] == column]
-            db_column_data_type = db_column_info.iloc[0]['data_type']
+            db_column_info = column_info_df[column_info_df['COLUMN_NAME'] == column]
+            db_column_data_type = db_column_info.iloc[0]['DATA_TYPE']
             df_column_data_type = df[column].dtype
-            db_column_numeric_precision = db_column_info.iloc[0]['numerical_precision']
-            db_column_string_length = db_column_info.iloc[0]['character_maximum_length']
+            db_column_numeric_precision = db_column_info.iloc[0]['NUMERIC_PRECISION']
+            db_column_string_length = db_column_info.iloc[0]['CHARACTER_MAXIMUM_LENGTH']
             type_mismatch_error_message = (f'{column} in dataframe is of type {df_column_data_type} '
                                            f'while the database expects a type of {db_column_data_type}')
             if df_column_data_type in NUMPY_INT_TYPES:
