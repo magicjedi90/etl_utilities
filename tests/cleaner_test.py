@@ -75,9 +75,9 @@ class TestCleaner(unittest.TestCase):
             'bools': ['yes', 'no', 'true', 'false']
         })
         clean_df = Cleaner.clean_all(df)
-        self.assertEqual(clean_df['numbers'].dtype, 'int64')
+        self.assertEqual(clean_df['numbers'].dtype, pd.Int64Dtype.name)
         self.assertEqual(clean_df['dates'].dtype, 'datetime64[ns]')
-        self.assertEqual(clean_df['bools'].dtype, 'bool')
+        self.assertEqual(clean_df['bools'].dtype, pd.BooleanDtype.name)
 
     def test_generate_hash_column(self):
         df = pd.DataFrame({

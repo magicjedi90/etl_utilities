@@ -11,6 +11,7 @@ This repository provides a collection of utility functions and classes for data 
   - [Analyzer Class](#analyzer-class)
   - [TableMaker Class](#tablemaker-class)
   - [Inserter Class](#inserter-class)
+  - [Data Insertion and Validation](#data-insertion-and-validation)
 - [Testing](#testing)
 - [Contributing](#contributing)
 - [License](#license)
@@ -143,6 +144,31 @@ Generates a SQL UPSERT statement.
 #### `Inserter.append_mssql(source_schema, source_table, target_schema, target_table, columns)`
 
 Generates a SQL INSERT statement with EXCEPT.
+
+### Data Insertion and Validation
+
+The Loader class provides methods for inserting data into MSSQL tables and validating dataframes prior to uploading.
+
+Example usage:
+
+```python
+
+import pandas as pd
+from etl.database.loader import Loader
+from etl.database.connector import Connector
+
+connection = Connector().get_mssql_user_connection('host', 'instance', 'database', 'username', 'password')
+df = pd.DataFrame({
+    'id': [1, 2, 3],
+    'name': ['Alice', 'Bob', 'Charlie'],
+    'value': [10.5, 20.3, 30.7]
+})
+schema = 'dbo'
+table = 'test_table'
+
+Loader.validate_mssql_upload(connection, df, schema, table)
+Loader.insert_to_mssql_table(connection.cursor(), df, schema, table)
+```
 ## Testing
 
 To run the unit tests, use the following command:
