@@ -134,7 +134,7 @@ class Cleaner:
             try:
                 if not is_clean:
                     df[column] = values.apply(clean_date)
-                print(f'{column} has been cast to datetime')
+                    print(f'{column} has been cast to datetime')
             except (parser.ParserError, OverflowError):
                 pass
         df = df.convert_dtypes()
