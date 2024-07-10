@@ -115,22 +115,24 @@ class Cleaner:
     def clean_all(df: pd.DataFrame):
         for column, values in df.items():
             try:
+                df[column] = values.apply(clean_bool)
+                print(f'{column} has been cast to bool')
+                continue
+            except ValueError:
+                pass
+            try:
                 clean_floats = values.apply(clean_float)
                 df[column] = clean_floats
                 print(f'{column} has been cast to float')
                 df[column] = clean_floats.apply(clean_int)
                 print(f'{column} has been cast to int')
+                continue
             except (ValueError, TypeError):
                 pass
             try:
                 df[column] = values.apply(clean_date)
                 print(f'{column} has been cast to datetime')
             except (parser.ParserError, OverflowError):
-                pass
-            try:
-                df[column] = values.apply(clean_bool)
-                print(f'{column} has been cast to bool')
-            except ValueError:
                 pass
         df = df.convert_dtypes()
         return df
