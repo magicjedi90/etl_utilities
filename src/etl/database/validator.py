@@ -6,6 +6,19 @@ import numpy as np
 
 
 class Validator:
+    """
+    Validates the upload of a DataFrame to a database table.
+
+    Args:
+        connection: The database connection object.
+        df: The DataFrame to be uploaded.
+        schema: The schema of the destination table.
+        table: The name of the destination table.
+
+    Raises:
+        ExtraColumnsException: If the DataFrame has extra columns not present in the database table.
+        ColumnDataException: If there are type mismatches or truncation issues with the columns in the DataFrame.
+    """
     @staticmethod
     def validate_upload(connection, df: pd.DataFrame, schema: str, table: str):
         df_columns, column_info_df = Validator._fetch_column_info(connection, df, schema, table)
@@ -84,8 +97,20 @@ class Validator:
 
 
 class ExtraColumnsException(Exception):
+    """
+    This class represents an exception that is raised when there are extra columns
+    in a dataset that are not expected.
+
+    :param Exception: The base exception class.
+    """
     pass
 
 
 class ColumnDataException(Exception):
+    """
+    Defines the ColumnDataException class, which is an exception subclass used for raising errors related to column data.
+
+    Classes:
+        ColumnDataException(Exception): An exception subclass for column data errors.
+    """
     pass

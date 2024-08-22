@@ -3,32 +3,32 @@ import unittest
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from src.etl.dataframe.cleaner import clean_float, clean_date, clean_int, hash_str, Cleaner
+from src.etl.dataframe.cleaner import parse_float, parse_date, parse_integer, compute_hash, Cleaner
 
 
 class TestCleanFunctions(unittest.TestCase):
 
-    def test_clean_float(self):
-        self.assertEqual(clean_float('123.45'), 123.45)
-        self.assertEqual(clean_float('$1,234.56'), 1234.56)
-        self.assertIsNone(clean_float(None))
+    def test_parse_float(self):
+        self.assertEqual(parse_float('123.45'), 123.45)
+        self.assertEqual(parse_float('$1,234.56'), 1234.56)
+        self.assertIsNone(parse_float(None))
 
-    def test_clean_date(self):
-        self.assertEqual(clean_date('2021-01-01'), datetime(2021, 1, 1))
-        self.assertEqual(clean_date('01/01/2021'), datetime(2021, 1, 1))
-        self.assertIsNone(clean_date(None))
-        self.assertIsNone(clean_date(np.nan))
+    def test_parse_date(self):
+        self.assertEqual(parse_date('2021-01-01'), datetime(2021, 1, 1))
+        self.assertEqual(parse_date('01/01/2021'), datetime(2021, 1, 1))
+        self.assertIsNone(parse_date(None))
+        self.assertIsNone(parse_date(np.nan))
 
-    def test_clean_int(self):
-        self.assertEqual(clean_int(123), 123)
-        self.assertEqual(clean_int(123.0), 123)
+    def test_parse_int(self):
+        self.assertEqual(parse_integer(123), 123)
+        self.assertEqual(parse_integer(123.0), 123)
         with self.assertRaises(ValueError):
-            clean_int(123.45)
-        self.assertIsNone(clean_int(None))
-        self.assertIsNone(clean_int(np.nan))
+            parse_integer(123.45)
+        self.assertIsNone(parse_integer(None))
+        self.assertIsNone(parse_integer(np.nan))
 
-    def test_hash_str(self):
-        self.assertEqual(hash_str('test'), hashlib.sha1('test'.encode()).hexdigest())
+    def test_compute_hash(self):
+        self.assertEqual(compute_hash('test'), hashlib.sha1('test'.encode()).hexdigest())
 
 
 class TestCleaner(unittest.TestCase):
@@ -45,7 +45,7 @@ class TestCleaner(unittest.TestCase):
         Cleaner.column_names_to_snake_case(self.df)
         self.assertEqual(expected_columns, self.df.columns.tolist())
 
-    def test_clean_numbers(self):
+    def test_parse_numbers(self):
         df = pd.DataFrame({
             'ints': ['$1,000', '2,000', '3,000'],
             'floats': ['$1,000.55', '2,000.66', '3,000.33']
@@ -85,7 +85,7 @@ class TestCleaner(unittest.TestCase):
             'col2': ['value3', 'value4']
         })
         expected_hash = df['col1'].apply(str) + df['col2'].apply(str)
-        expected_hash = expected_hash.apply(hash_str)
+        expected_hash = expected_hash.apply(compute_hash)
         expected_hash.name = 'hash'
         result_df = Cleaner.generate_hash_column(df, ['col1', 'col2'], 'hash')
         result_series = result_df['hash']
