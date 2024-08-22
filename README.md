@@ -159,14 +159,14 @@ from etl.database.connector import Connector
 
 connection = Connector().get_mssql_user_connection('host', 'instance', 'database', 'username', 'password')
 df = pd.DataFrame({
-    'id': [1, 2, 3],
-    'name': ['Alice', 'Bob', 'Charlie'],
-    'value': [10.5, 20.3, 30.7]
+  'id': [1, 2, 3],
+  'name': ['Alice', 'Bob', 'Charlie'],
+  'value': [10.5, 20.3, 30.7]
 })
 schema = 'dbo'
 table = 'test_table'
 
-Loader.validate_mssql_upload(connection, df, schema, table)
+Loader.validate_upload(connection, df, schema, table)
 Loader.insert_to_mssql_table(connection.cursor(), df, schema, table)
 ```
 ## Testing
