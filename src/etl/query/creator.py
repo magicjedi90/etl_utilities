@@ -38,7 +38,7 @@ def cast_to_bool(dirty_bool):
         raise ValueError("invalid truth value %r" % (dirty_bool,))
 
 
-class Maker:
+class Creator:
     @staticmethod
     def make_mssql_table(df: pd.DataFrame, schema: str, table: str, primary_key: str = None, history: bool = False,
                          varchar_padding: int = 20, float_precision: int = 10, decimal_places: int = 2):

@@ -1,7 +1,7 @@
 import unittest
 import pandas as pd
 from datetime import datetime
-from src.etl.query.maker import cast_to_float, cast_to_datetime, cast_to_int, Maker
+from src.etl.query.creator import cast_to_float, cast_to_datetime, cast_to_int, Creator
 
 
 class TestCastingFunctions(unittest.TestCase):
@@ -54,8 +54,8 @@ class TestTableMaker(unittest.TestCase):
             "with (system_versioning = on (history_table = dbo.[test_table_history]));"
         )
 
-        actual_query = Maker.make_mssql_table(df, 'dbo', 'test_table',
-                                              primary_key='id_column', history=True)
+        actual_query = Creator.make_mssql_table(df, 'dbo', 'test_table',
+                                                primary_key='id_column', history=True)
 
         self.assertEqual(expected_query, actual_query)
 

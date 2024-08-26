@@ -1,4 +1,4 @@
-class Inserter:
+class Updater:
     @staticmethod
     def merge_mssql(source_schema: str, source_table: str, target_schema: str, target_table: str, columns: list[str],
                     id_column: str, delete_unmatched: bool = True):

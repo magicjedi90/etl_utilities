@@ -6,7 +6,6 @@ from dateutil import parser
 from rich import print
 
 
-# Renamed and simplified value cleaning functions
 def parse_boolean(value):
     """
     Function to parse a boolean value from a given input.

@@ -9,8 +9,8 @@ This repository provides a collection of utility functions and classes for data 
   - [Cleaning Functions](#cleaning-functions)
   - [Cleaner Class](#cleaner-class)
   - [Analyzer Class](#analyzer-class)
-  - [Maker Class](#maker-class)
-  - [Inserter Class](#inserter-class)
+  - [Creator Class](#creator-class)
+  - [Updater Class](#updater-class)
   - [Validator Class](#validator-class)
 - [Testing](#testing)
 - [Contributing](#contributing)
@@ -281,22 +281,22 @@ df = pd.DataFrame({'first': [1, 2, 2], 'second': [3, 3, 4]})
 candidates = Analyzer.find_id_pair_candidates(df)
 print(candidates)  # Output: [('first', 'second')]
 ```
-### Maker Class
+### Creator Class
 
 Generates SQL queries for creating tables.
-#### `Maker.make_mssql_table(df, schema, table, primary_key=None, history=False, varchar_padding=20, float_precision=10, decimal_places=2)`
+#### `Creator.make_mssql_table(df, schema, table, primary_key=None, history=False, varchar_padding=20, float_precision=10, decimal_places=2)`
 
 Generates a SQL CREATE TABLE statement based on a DataFrame.
-### Inserter Class
+### Updater Class
 
 Generates SQL queries for inserting and merging data.
-#### `Inserter.merge_mssql(source_schema, source_table, target_schema, target_table, columns, id_column, delete_unmatched=True)`
+#### `Updater.merge_mssql(source_schema, source_table, target_schema, target_table, columns, id_column, delete_unmatched=True)`
 
 Generates a SQL MERGE statement.
-#### `Inserter.upsert_mssql(source_schema, source_table, target_schema, target_table, columns, id_column)`
+#### `Updater.upsert_mssql(source_schema, source_table, target_schema, target_table, columns, id_column)`
 
 Generates a SQL UPSERT statement.
-#### `Inserter.append_mssql(source_schema, source_table, target_schema, target_table, columns)`
+#### `Updater.append_mssql(source_schema, source_table, target_schema, target_table, columns)`
 
 Generates a SQL INSERT statement with EXCEPT.
 
