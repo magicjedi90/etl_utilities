@@ -170,8 +170,10 @@ class Cleaner:
         return df
 
     @staticmethod
-    def coalesce_columns(df: pd.DataFrame, columns_to_coalesce, new_column_name, drop=False):
-        df[new_column_name] = df[columns_to_coalesce].bfill(axis=1).iloc[:, 0]
+    def coalesce_columns(df: pd.DataFrame, columns_to_coalesce, target_column, drop=False):
+        df[target_column] = df[columns_to_coalesce].bfill(axis=1).iloc[:, 0]
         if drop:
+            if target_column in columns_to_coalesce:
+                columns_to_coalesce.remove(target_column)
             df = df.drop(columns=columns_to_coalesce)
         return df
