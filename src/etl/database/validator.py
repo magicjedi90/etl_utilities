@@ -50,6 +50,9 @@ class Validator:
         truncated_columns = []
 
         for column in df_columns:
+            if df[column].dropna().empty:
+                print(f'{column} is empty skipping type validation')
+                continue
             db_column_info = column_info_df[column_info_df['COLUMN_NAME'] == column].iloc[0]
             db_column_data_type = db_column_info['DATA_TYPE']
             df_column_data_type = df[column].dtype

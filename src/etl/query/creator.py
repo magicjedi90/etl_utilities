@@ -7,7 +7,7 @@ from rich import print
 
 
 def cast_to_float(dirty_float):
-    if dirty_float is None or dirty_float is np.nan:
+    if dirty_float is None or pd.isnull(dirty_float):
         return
     return float(dirty_float)
 
@@ -19,7 +19,7 @@ def cast_to_datetime(dirty_date):
 
 
 def cast_to_int(dirty_int):
-    if dirty_int is None or np.isnan(dirty_int):
+    if dirty_int is None or pd.isnull(dirty_int):
         return
     if dirty_int == int(dirty_int):
         return int(dirty_int)

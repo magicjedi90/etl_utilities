@@ -13,7 +13,7 @@ def parse_boolean(value):
     :return: The parsed boolean value.
     The function takes a value as an input and attempts to parse it as a boolean. If the value is `None`, it returns `None`. If the value is a case-insensitive match for any of the truthy values ('y', 'yes', 't', 'true', 'on', '1'), it returns `True`. If the value is a case-insensitive match for any of the falsy values ('n', 'no', 'f', 'false', 'off', '0'), it returns `False`. Otherwise, it raises a `ValueError` with an error message indicating the invalid truth value.
     """
-    if value is None:
+    if value is None or pd.isnull(value):
         return
     value = str(value).lower()
     truthy_values = ('y', 'yes', 't', 'true', 'on', '1')
@@ -56,11 +56,11 @@ def parse_integer(value):
     :return: The parsed integer value.
     :raises ValueError: If the value is not a valid integer.
     """
-    if value is None or np.isnan(value):
+    if value is None or pd.isnull(value):
         return
     if value == int(value):
         return int(value)
-    raise ValueError
+    raise ValueError(f'Invalid integer value: {value}')
 
 
 def compute_hash(value):
@@ -82,8 +82,8 @@ def standardize_column_name(name):
     """
     name = (str(name).strip()
             .replace('?', '').replace('(', '').replace(')', '')
-            .replace('\\', '').replace(',', '').replace('#', 'Num')
-            .replace('$', 'Dollars'))
+            .replace('\\', '').replace(',', '').replace('/','')
+            .replace('#', 'Num').replace('$', 'Dollars'))
     name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
     name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
     return (name.replace('.', '_').replace(':', '_').replace(' ', '_')
@@ -111,7 +111,11 @@ class Cleaner:
     @staticmethod
     def clean_series(series: pd.Series, clean_function):
         try:
-            return series.apply(clean_function)
+            cleaned_series = series.apply(clean_function)
+            series_dtype = clean_function.__annotations__.get('return', None)
+            if series_dtype:
+                cleaned_series = cleaned_series.astype(series_dtype)
+            return cleaned_series
         except (ValueError, TypeError, parser.ParserError, OverflowError):
             raise
 
@@ -141,9 +145,12 @@ class Cleaner:
     def clean_all(df: pd.DataFrame):
         try_functions = [parse_float, parse_integer, parse_boolean, parse_date]
         for column, series in df.items():
+            if series.dropna().empty:
+                print(f'{column} is empty skipping cleaning')
+                df[column] = df[column].astype(str)
+                continue
             is_column_clean = False
             for func in try_functions:
-                # if the column has already been cleaned, make sure that it's either a boolean or the next cleaning call is parse_integer
                 if is_column_clean and func == parse_date:
                     continue
                 try:
@@ -151,7 +158,8 @@ class Cleaner:
                     df[column] = series
                     is_column_clean = True
                     print(f'{column} was cleaned with {func.__name__}')
-                except (ValueError, TypeError, parser.ParserError, OverflowError):
+                except (ValueError, TypeError, parser.ParserError, OverflowError) as error:
+                    # print(f'{column} failed cleaning with {func.__name__}: {error}')
                     pass
         df = df.convert_dtypes()
         return df

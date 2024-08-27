@@ -47,8 +47,8 @@ class TestCleaner(unittest.TestCase):
 
     def test_parse_numbers(self):
         df = pd.DataFrame({
-            'ints': ['$1,000', '2,000', '3,000'],
-            'floats': ['$1,000.55', '2,000.66', '3,000.33']
+            'ints': ['$1,000', '2,000', '3,000', '244385297.0'],
+            'floats': ['$1,000.55', '2,000.66', '3,000.33', '1209347']
         })
         clean_df = Cleaner.clean_numbers(df)
         self.assertEqual(clean_df['ints'].dtype, 'int64')
@@ -70,7 +70,7 @@ class TestCleaner(unittest.TestCase):
 
     def test_clean_all(self):
         df = pd.DataFrame({
-            'numbers': ['$1,000', '2,000', '3,000', '%100'],
+            'numbers': ['$1,000', '248166676', '3,000', '%100'],
             'dates': ['2021-01-01', '01/02/2021', '2021-01-01', '01/02/2021'],
             'bools': ['yes', 'no', 'true', 'false']
         })
