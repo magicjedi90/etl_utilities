@@ -95,18 +95,22 @@ class Cleaner:
     """
     This class provides static methods for data cleaning operations on a pandas DataFrame.
     The `column_names_to_snake_case` static method takes a DataFrame as input and converts the column names to snake case using the `standardize_column_name` function.
-    The `clean_column` static method takes a DataFrame, a column name, and a clean function as input. It applies the clean function to the specified column in the DataFrame and returns the cleaned column. If any exceptions occur during the cleaning process, the method raises an exception.
+    The `clean_series` static method takes a series, and a clean function as input. It applies the clean function to the specified series and returns the cleaned series. If any exceptions occur during the cleaning process, the method raises an exception.
     The `clean_numbers` static method takes a DataFrame as input and cleans all numeric columns by applying the `parse_float` function to each column. It also attempts to apply the `parse_integer` function to each column, but ignores any exceptions that occur.
     The `clean_dates` static method takes a DataFrame as input and cleans all date columns by applying the `parse_date` function to each column.
     The `clean_bools` static method takes a DataFrame as input and cleans all boolean columns by applying the `parse_boolean` function to each column.
     The `clean_all` static method takes a DataFrame as input and performs a comprehensive cleaning process by applying a set of cleaning functions, including `parse_boolean`, `parse_float`, `parse_integer`, and `parse_date`, to each column in the DataFrame. It handles exceptions that occur during the cleaning process and converts the DataFrame to the appropriate data types.
     The `generate_hash_column` static method takes a DataFrame, a list of column names to hash, and a new column name as input. It computes a hash value for each row based on the specified columns and adds a new column with the hash values to the DataFrame.
-    The `coalesce_columns` static method takes a DataFrame, a list of columns to coalesce, a new column name, and an optional drop flag as input. It coalesces the specified columns by filling missing values with the previous non-null value in each row and creates a new column with the coalesced values. If the drop flag is True, the method drops the original columns from the DataFrame.
+    The `coalesce_columns` static method takes a DataFrame, a list of columns to coalesce, a target column name, and an optional drop flag as input. It coalesces the specified columns by filling missing values with the previous non-null value in each row and creates or consolidates the target column with the coalesced values. If the drop flag is True, the method drops the original columns from the DataFrame.
     """
 
     @staticmethod
     def column_names_to_snake_case(df: pd.DataFrame):
         df.columns = [standardize_column_name(name) for name in df.columns]
+
+    @staticmethod
+    def column_names_to_pascal_case(df: pd.DataFrame):
+        df.columns = ["".join(standardize_column_name(name).title().split('_')) for name in df.columns]
 
     @staticmethod
     def clean_series(series: pd.Series, clean_function):

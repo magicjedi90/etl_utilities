@@ -127,13 +127,25 @@ Converts all column names in the DataFrame to snake_case.
 Cleaner.column_names_to_snake_case(df)
 ```
 
-#### `Cleaner.clean_column(df, column, clean_function)`
+#### `Cleaner.column_names_to_pascal_case(df)`
 
-Cleans a specified column using a provided function.
+Converts all column names in the DataFrame to PascalCase.
 
 - **Parameters:** 
-  - `df` (*pd.DataFrame*): The DataFrame with the column to be cleaned.
-  - `column` (*str*): The column name.
+  - `df` (*pd.DataFrame*): The DataFrame whose column names need to be converted.
+- **Returns:** 
+  - None
+  
+```python
+Cleaner.column_names_to_pascal_case(df)
+```
+
+#### `Cleaner.clean_series(series, clean_function)`
+
+Cleans a specified series using a provided function, and attempts to cast the series to the return functions dtype.
+
+- **Parameters:** 
+  - `series` (*pd.Series*): The series to be cleaned.
   - `clean_function` (*function*): The function to clean the column.
 - **Returns:** 
   - The cleaned column.
@@ -216,7 +228,7 @@ Combines multiple columns into a single column, prioritizing non-null values.
 - **Parameters:** 
   - `df` (*pd.DataFrame*): The DataFrame to be processed.
   - `columns_to_coalesce` (*list*): The list of columns to coalesce.
-  - `new_column_name` (*str*): The name of the new column.
+  - `target_column` (*str*): The name of the target column.
   - `drop` (*bool*): Whether to drop the original columns.
 - **Returns:** 
   - `pd.DataFrame`: The DataFrame with the coalesced column.

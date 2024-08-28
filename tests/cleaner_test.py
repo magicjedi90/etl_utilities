@@ -45,6 +45,11 @@ class TestCleaner(unittest.TestCase):
         Cleaner.column_names_to_snake_case(self.df)
         self.assertEqual(expected_columns, self.df.columns.tolist())
 
+    def test_column_names_to_pascal_case(self):
+        expected_columns = ['MixedCase', 'WithSpaces', 'WithDollarsSpecialNumChars']
+        Cleaner.column_names_to_pascal_case(self.df)
+        self.assertEqual(expected_columns, self.df.columns.tolist())
+
     def test_parse_numbers(self):
         df = pd.DataFrame({
             'ints': ['$1,000', '2,000', '3,000', '244385297.0'],
