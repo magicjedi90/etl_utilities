@@ -44,7 +44,7 @@ def parse_date(value):
     :param value: The value to be parsed as a date.
     :return: The parsed date value.
     """
-    if value is None or value is np.nan:
+    if value is None or pd.isnull(value):
         return
     return parser.parse(str(value).strip())
 
@@ -83,7 +83,7 @@ def standardize_column_name(name):
     name = (str(name).strip()
             .replace('?', '').replace('(', '').replace(')', '')
             .replace('\\', '').replace(',', '').replace('/','')
-            .replace('#', 'Num').replace('$', 'Dollars'))
+            .replace('\'','').replace('#', 'Num').replace('$', 'Dollars'))
     name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
     name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
     return (name.replace('.', '_').replace(':', '_').replace(' ', '_')
