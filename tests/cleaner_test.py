@@ -56,7 +56,8 @@ class TestCleaner(unittest.TestCase):
         df = pd.DataFrame({
             'numbers': ['$1,000', '248166676', '3,000', '%100'],
             'dates': ['2021-01-01', '01/02/2021', '2021-01-01', '01/02/2021'],
-            'bools': ['yes', 'no', 'true', 'false']
+            'bools': ['yes', 'no', 'true', 'false'],
+            'empty': [None, None, None, None]
         })
         clean_df = Cleaner.clean_all(df)
         self.assertEqual(clean_df['numbers'].dtype, pd.Int64Dtype.name)
@@ -78,16 +79,13 @@ class TestCleaner(unittest.TestCase):
     def test_coalesce_columns(self):
         df = pd.DataFrame({
             'col1': [None, 'B'],
-            'col2': ['A', 'B'],
-            'col3': [None, 'C']
+            'col2': ['A', None],
         })
         expected_df = pd.DataFrame({
-            'col1': [None, 'B'],
-            'col2': ['A', 'B'],
-            'col3': [None, 'C'],
-            'coalesced': ['A', 'B']
+            'col1': ['A', 'B']
         })
-        result_df = Cleaner.coalesce_columns(df, ['col1', 'col2'], 'coalesced')
+        result_df = Cleaner.coalesce_columns(df, ['col1', 'col2'], 'col1',drop=True)
+        self.assertEqual(result_df.shape, (2, 1))
         pd.testing.assert_frame_equal(result_df, expected_df)
 
 

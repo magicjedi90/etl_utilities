@@ -28,3 +28,4 @@ class Connector:
         connection_string = f'mysql+pymysql://{username}:{password}@{host}/{database}?charset=utf8mb4"'
         engine = create_engine(connection_string)
         return engine.connect().connection
+
