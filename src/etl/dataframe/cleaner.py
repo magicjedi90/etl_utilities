@@ -1,67 +1,9 @@
 import hashlib
 import re
-import numpy as np
 import pandas as pd
-from dateutil import parser
 from rich import print
-
-
-def parse_boolean(value):
-    """
-    Function to parse a boolean value from a given input.
-    :param value: The value to be parsed as a boolean.
-    :return: The parsed boolean value.
-    The function takes a value as an input and attempts to parse it as a boolean. If the value is `None`, it returns `None`. If the value is a case-insensitive match for any of the truthy values ('y', 'yes', 't', 'true', 'on', '1'), it returns `True`. If the value is a case-insensitive match for any of the falsy values ('n', 'no', 'f', 'false', 'off', '0'), it returns `False`. Otherwise, it raises a `ValueError` with an error message indicating the invalid truth value.
-    """
-    if value is None or pd.isnull(value):
-        return
-    value = str(value).lower()
-    truthy_values = ('y', 'yes', 't', 'true', 'on', '1')
-    falsy_values = ('n', 'no', 'f', 'false', 'off', '0')
-    if value in truthy_values:
-        return True
-    elif value in falsy_values:
-        return False
-    else:
-        raise ValueError(f"Invalid truth value: {value}")
-
-
-def parse_float(value):
-    """
-    Function to parse a given value as a float.
-    :param value: The value to parse as a float.
-    :return: The parsed float value.
-    """
-    if value is None:
-        return
-    cleaned_value = str(value).replace(',', '').replace('$', '').replace('%', '')
-    return float(cleaned_value)
-
-
-def parse_date(value):
-    """
-    This function is used to parse a date value.
-    :param value: The value to be parsed as a date.
-    :return: The parsed date value.
-    """
-    if value is None or pd.isnull(value):
-        return
-    return parser.parse(str(value).strip())
-
-
-def parse_integer(value):
-    """
-    Parses an input value to an integer.
-    :param value: The value to be parsed.
-    :return: The parsed integer value.
-    :raises ValueError: If the value is not a valid integer.
-    """
-    if value is None or pd.isnull(value):
-        return
-    if value == int(value):
-        return int(value)
-    raise ValueError(f'Invalid integer value: {value}')
-
+from dateutil import parser
+from src.etl.dataframe.parser import Parser
 
 def compute_hash(value):
     """
@@ -126,9 +68,9 @@ class Cleaner:
     @staticmethod
     def clean_numbers(df: pd.DataFrame):
         for column, series in df.items():
-            df[column] = Cleaner.clean_series(series, parse_float)
+            df[column] = Cleaner.clean_series(series, Parser.parse_float)
             try:
-                df[column] = Cleaner.clean_series(df[column], parse_integer)
+                df[column] = Cleaner.clean_series(df[column], Parser.parse_integer)
             except ValueError:
                 pass
         return df
@@ -136,18 +78,18 @@ class Cleaner:
     @staticmethod
     def clean_dates(df: pd.DataFrame):
         for column, series in df.items():
-            df[column] = Cleaner.clean_series(series, parse_date)
+            df[column] = Cleaner.clean_series(series, Parser.parse_date)
         return df
 
     @staticmethod
     def clean_bools(df: pd.DataFrame):
         for column, series in df.items():
-            df[column] = Cleaner.clean_series(series, parse_boolean)
+            df[column] = Cleaner.clean_series(series, Parser.parse_boolean)
         return df
 
     @staticmethod
     def clean_all(df: pd.DataFrame):
-        try_functions = [parse_float, parse_integer, parse_boolean, parse_date]
+        try_functions = [Parser.parse_float, Parser.parse_integer, Parser.parse_boolean, Parser.parse_date]
         for column, series in df.items():
             if series.dropna().empty:
                 print(f'{column} is empty skipping cleaning')
@@ -155,7 +97,7 @@ class Cleaner:
                 continue
             is_column_clean = False
             for func in try_functions:
-                if is_column_clean and func == parse_date:
+                if is_column_clean and func == Parser.parse_date:
                     continue
                 try:
                     series = Cleaner.clean_series(series, func)

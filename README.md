@@ -6,22 +6,21 @@ This repository provides a collection of utility functions and classes for data 
 
 
 - [Usage](#usage)
-  - [Cleaning Functions](#cleaning-functions)
+  - [Parser Class](#parser-class)
   - [Cleaner Class](#cleaner-class)
   - [Analyzer Class](#analyzer-class)
   - [Creator Class](#creator-class)
   - [Updater Class](#updater-class)
   - [Validator Class](#validator-class)
-- [Testing](#testing)
 - [Contributing](#contributing)
 - [License](#license)
 
 
 ## Usage
 
-### Cleaning Functions
+### `Parser` Class
 
-#### `parse_boolean(value)`
+#### `Parser.parse_boolean(value)`
 
 Parses boolean values from various possible string representations.
 
@@ -33,11 +32,11 @@ Parses boolean values from various possible string representations.
   - `ValueError`: If the value is not a recognized boolean representation.
 
 ```python
-parse_boolean('yes')   # True
-parse_boolean('no')    # False
+Parser.parse_boolean('yes')   # True
+Parser.parse_boolean('no')    # False
 ```
 
-#### `parse_float(value)`
+#### `Parser.parse_float(value)`
 
 Parses a float value, cleaning up common characters like commas, dollar signs, and percentages.
 
@@ -47,11 +46,11 @@ Parses a float value, cleaning up common characters like commas, dollar signs, a
   - `float` or `None`
   
 ```python
-parse_float('$1,234.56')    # 1234.56
-parse_float('45%')          # 45.0
+Parser.parse_float('$1,234.56')    # 1234.56
+Parser.parse_float('45%')          # 45.0
 ```
 
-#### `parse_date(value)`
+#### `Parser.parse_date(value)`
 
 Parses values into a date.
 
@@ -61,10 +60,10 @@ Parses values into a date.
   - `datetime` or `None`
   
 ```python
-parse_date('2023-10-04')    # datetime object
+Parser.parse_date('2023-10-04')    # datetime object
 ```
 
-#### `parse_integer(value)`
+#### `Parser.parse_integer(value)`
 
 Parses integer values.
 
@@ -76,8 +75,12 @@ Parses integer values.
   - `ValueError`: If the value cannot be converted to an integer.
   
 ```python
-parse_integer('123')   # 123
+Parser.parse_integer('123')   # 123
 ```
+
+### `Cleaner` Class
+
+This class provides static methods to clean and manipulate pandas DataFrame columns.
 
 #### `compute_hash(value)`
 
@@ -92,8 +95,6 @@ Computes a SHA-1 hash of the input value.
 compute_hash('test')    # 'a94a8fe5ccb19ba61c4c0873d391e987982fbbd3'
 ```
 
-### Helper Functions
-
 #### `standardize_column_name(name)`
 
 Standardizes column names into snake_case.
@@ -107,12 +108,6 @@ Standardizes column names into snake_case.
 standardize_column_name('Date of Birth')    # 'date_of_birth'
 standardize_column_name('Employee ID#')     # 'employee_id_num'
 ```
-
-## `Cleaner` Class
-
-This class provides static methods to clean and manipulate pandas DataFrame columns.
-
-### Methods
 
 #### `Cleaner.column_names_to_snake_case(df)`
 
@@ -293,13 +288,13 @@ df = pd.DataFrame({'first': [1, 2, 2], 'second': [3, 3, 4]})
 candidates = Analyzer.find_id_pair_candidates(df)
 print(candidates)  # Output: [('first', 'second')]
 ```
-### Creator Class
+### `Creator` Class
 
 Generates SQL queries for creating tables.
 #### `Creator.make_mssql_table(df, schema, table, primary_key=None, history=False, varchar_padding=20, float_precision=10, decimal_places=2)`
 
 Generates a SQL CREATE TABLE statement based on a DataFrame.
-### Updater Class
+### `Updater` Class
 
 Generates SQL queries for inserting and merging data.
 #### `Updater.merge_mssql(source_schema, source_table, target_schema, target_table, columns, id_column, delete_unmatched=True)`
@@ -316,7 +311,6 @@ Generates a SQL INSERT statement with EXCEPT.
 
 This class provides static methods to validate the structure and data of a DataFrame before uploading it to a database.
 
-#### Methods
 
 ##### `validate_upload(connection, df: pd.DataFrame, schema: str, table: str)`
 

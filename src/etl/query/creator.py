@@ -2,40 +2,8 @@ import math
 
 import numpy as np
 import pandas as pd
-from dateutil import parser
+from src.etl.dataframe.parser import Parser
 from rich import print
-
-
-def cast_to_float(dirty_float):
-    if dirty_float is None or pd.isnull(dirty_float):
-        return
-    return float(dirty_float)
-
-
-def cast_to_datetime(dirty_date):
-    if dirty_date is None:
-        return
-    return parser.parse(str(dirty_date))
-
-
-def cast_to_int(dirty_int):
-    if dirty_int is None or pd.isnull(dirty_int):
-        return
-    if dirty_int == int(dirty_int):
-        return int(dirty_int)
-    raise ValueError
-
-
-def cast_to_bool(dirty_bool):
-    if dirty_bool is None:
-        return
-    dirty_bool = str(dirty_bool).lower()
-    if dirty_bool in ('y', 'yes', 't', 'true', 'on', '1'):
-        return 1
-    elif dirty_bool in ('n', 'no', 'f', 'false', 'off', '0'):
-        return 0
-    else:
-        raise ValueError("invalid truth value %r" % (dirty_bool,))
 
 
 class Creator:
@@ -54,12 +22,12 @@ class Creator:
                 column_type_list.append(column_string)
                 continue
             try:
-                series.apply(cast_to_datetime)
+                series.apply(Parser.parse_date)
                 column_string = f'[{column}] datetime2'
             except (ValueError, TypeError, OverflowError):
                 pass
             try:
-                series.apply(cast_to_float)
+                series.apply(Parser.parse_float)
                 left_digits = int(math.log10(series.max())) + 1
                 if float_precision < left_digits + decimal_places:
                     float_precision = left_digits + decimal_places
@@ -67,7 +35,7 @@ class Creator:
             except (ValueError, TypeError):
                 pass
             try:
-                series.apply(cast_to_int)
+                series.apply(Parser.parse_integer)
                 biggest_num = series.max()
                 smallest_num = series.min()
                 if smallest_num < -2147483648 or biggest_num > 2147483648:
@@ -81,7 +49,7 @@ class Creator:
             except (ValueError, TypeError):
                 pass
             try:
-                series.apply(cast_to_bool)
+                series.apply(Parser.parse_boolean)
                 column_string = f'[{column}] bit'
             except ValueError:
                 pass

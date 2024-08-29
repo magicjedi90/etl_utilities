@@ -1,27 +1,7 @@
 import unittest
 import pandas as pd
 from datetime import datetime
-from src.etl.query.creator import cast_to_float, cast_to_datetime, cast_to_int, Creator
-
-
-class TestCastingFunctions(unittest.TestCase):
-
-    def test_cast_to_float(self):
-        self.assertEqual(cast_to_float('123.45'), 123.45)
-        self.assertEqual(cast_to_float(123.45), 123.45)
-        self.assertIsNone(cast_to_float(None))
-
-    def test_cast_to_datetime(self):
-        self.assertEqual(cast_to_datetime('2021-01-01'), datetime(2021, 1, 1))
-        self.assertEqual(cast_to_datetime('01/01/2021'), datetime(2021, 1, 1))
-        self.assertIsNone(cast_to_datetime(None))
-
-    def test_cast_to_int(self):
-        self.assertEqual(cast_to_int(123), 123)
-        self.assertEqual(cast_to_int(123.0), 123)
-        self.assertIsNone(cast_to_int(None))
-        with self.assertRaises(ValueError):
-            cast_to_int(123.45)
+from src.etl.query.creator import Creator
 
 
 class TestTableMaker(unittest.TestCase):
