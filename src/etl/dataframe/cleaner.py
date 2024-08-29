@@ -3,7 +3,7 @@ import re
 import pandas as pd
 from rich import print
 from dateutil import parser
-from src.etl.dataframe.parser import Parser
+from ..dataframe.parser import Parser
 
 def compute_hash(value):
     """

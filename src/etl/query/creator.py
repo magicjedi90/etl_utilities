@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 import pandas as pd
-from src.etl.dataframe.parser import Parser
+from ..dataframe.parser import Parser
 from rich import print
 
 
