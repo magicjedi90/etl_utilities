@@ -264,7 +264,7 @@ The above script will clean the DataFrame, convert column names to snake_case, c
 ### Analyzer Class
 
 Provides utilities for analyzing DataFrames.
-#### `Analyzer.find_single_id_candidate_columns(df)`
+#### `Analyzer.find_unique_columns(df)`
 
 Finds columns that can serve as unique identifiers.
 
@@ -273,11 +273,11 @@ import pandas as pd
 from etl.dataframe.analyzer import Analyzer
 
 df = pd.DataFrame({'id': [1, 2, 3], 'name': ['Alice', 'Bob', 'Alice']})
-candidates = Analyzer.find_single_id_candidate_columns(df)
+candidates = Analyzer.find_unique_columns(df)
 print(candidates)  # Output: ['id']
 
 ```
-#### `Analyzer.find_id_pair_candidates(df)`
+#### `Analyzer.find_unique_column_pairs(df)`
 Finds pairs of columns that can serve as unique identifiers.
 
 ```python
@@ -285,13 +285,25 @@ import pandas as pd
 from etl.dataframe.analyzer import Analyzer
 
 df = pd.DataFrame({'first': [1, 2, 2], 'second': [3, 3, 4]})
-candidates = Analyzer.find_id_pair_candidates(df)
+candidates = Analyzer.find_unique_column_pairs(df)
 print(candidates)  # Output: [('first', 'second')]
+```
+
+#### `Analyzer.find_empty_columns(df)`
+Finds empty columns in dataframe.
+
+```python
+import pandas as pd
+from etl.dataframe.analyzer import Analyzer
+
+df = pd.DataFrame({'first': [1, 2, 2], 'second': [None, None, None]})
+candidates = Analyzer.find_empty_columns(df)
+print(candidates)  # Output: ['second']
 ```
 ### `Creator` Class
 
 Generates SQL queries for creating tables.
-#### `Creator.make_mssql_table(df, schema, table, primary_key=None, history=False, varchar_padding=20, float_precision=10, decimal_places=2)`
+#### `Creator.create_mssql_table(df, schema, table, primary_key=None, unique_columns= None, history=False, varchar_padding=20, float_precision=10, decimal_places=2, generate_id=False)`
 
 Generates a SQL CREATE TABLE statement based on a DataFrame.
 ### `Updater` Class

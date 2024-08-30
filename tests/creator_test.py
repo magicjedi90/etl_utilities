@@ -21,7 +21,7 @@ class TestTableMaker(unittest.TestCase):
             "create table dbo.[test_table] ("
             "[id_column] bigint constraint pk_test_table_id_column primary key, "
             "[int_column] tinyint, "
-            "[float_column] decimal(12, 2), "
+            "[float_column] decimal(10, 2), "
             "[date_column] datetime2, "
             "[bool_column] bit, "
             "[str_column] nvarchar(23), "
@@ -34,8 +34,8 @@ class TestTableMaker(unittest.TestCase):
             "with (system_versioning = on (history_table = dbo.[test_table_history]));"
         )
 
-        actual_query = Creator.make_mssql_table(df, 'dbo', 'test_table',
-                                                primary_key='id_column', history=True)
+        actual_query = Creator.create_mssql_table(df, 'dbo', 'test_table',
+                                                  primary_key='id_column', history=True)
 
         self.assertEqual(expected_query, actual_query)
 

@@ -1,68 +1,55 @@
-import math
-
-import numpy as np
 import pandas as pd
-from ..dataframe.parser import Parser
+from ..dataframe.analyzer import Analyzer
 from rich import print
 
 
 class Creator:
     @staticmethod
-    def make_mssql_table(df: pd.DataFrame, schema: str, table: str, primary_key: str = None, history: bool = False,
-                         varchar_padding: int = 20, float_precision: int = 10, decimal_places: int = 2):
-        df = df.replace({np.nan: None})
+    def create_mssql_table(df: pd.DataFrame, schema: str, table: str, primary_key: str = None,
+                           unique_columns: list[str] = None, history: bool = False,
+                           varchar_padding: int = 20, float_precision: int = 10, decimal_places: int = 2,
+                           generate_id: bool = False):
         location = f'{schema}.[{table}]'
+        column_metadata = Analyzer.generate_column_metadata(df, primary_key, unique_columns, decimal_places)
         column_type_list = []
-        for column, series in df.items():
-            is_id = column.__str__() == primary_key
+        if generate_id:
+            id_string = f'id int identity constraint pk_{table}_id primary key'
+            column_type_list.append(id_string)
+        for column in column_metadata:
             column_string = None
-            if series.dropna().empty:
-                print(f"{column} is empty - setting to nvarchar(max)")
-                column_string = f'[{column}] nvarchar(max)'
+            column_name = column['column_name']
+            if column['is_empty']:
+                print(f"{column_name} is empty - setting to nvarchar(max)")
+                column_string = f'[{column_name}] nvarchar(max)'
                 column_type_list.append(column_string)
                 continue
-            try:
-                series.apply(Parser.parse_date)
-                column_string = f'[{column}] datetime2'
-            except (ValueError, TypeError, OverflowError):
-                pass
-            try:
-                series.apply(Parser.parse_float)
-                left_digits = int(math.log10(series.max())) + 1
-                if float_precision < left_digits + decimal_places:
-                    float_precision = left_digits + decimal_places
-                column_string = f'[{column}] decimal({float_precision}, {decimal_places})'
-            except (ValueError, TypeError):
-                pass
-            try:
-                series.apply(Parser.parse_integer)
-                biggest_num = series.max()
-                smallest_num = series.min()
-                if smallest_num < -2147483648 or biggest_num > 2147483648:
-                    column_string = f'[{column}] bigint'
-                if smallest_num >= -2147483648 and biggest_num <= 2147483648:
-                    column_string = f'[{column}] int'
-                if smallest_num >= -32768 and biggest_num <= 32768:
-                    column_string = f'[{column}] smallint'
-                if smallest_num >= 0 and biggest_num <= 255:
-                    column_string = f'[{column}] tinyint'
-            except (ValueError, TypeError):
-                pass
-            try:
-                series.apply(Parser.parse_boolean)
-                column_string = f'[{column}] bit'
-            except ValueError:
-                pass
-            if column_string is None:
-                str_series = series.apply(str)
-                largest_string_size = str_series.str.len().max()
-                padded_length = int(largest_string_size + varchar_padding)
+            if column['data_type'] == 'datetime':
+                column_string = f'[{column_name}] datetime2'
+            if column['data_type'] == 'float':
+                if float_precision < column['float_precision']:
+                    float_precision = column['float_precision']
+                column_string = f'[{column_name}] decimal({float_precision}, {decimal_places})'
+            if column['data_type'] == 'integer':
+                if column['smallest_num'] < -2147483648 or column['biggest_num'] > 2147483648:
+                    column_string = f'[{column_name}] bigint'
+                if column['smallest_num'] >= -2147483648 and column['biggest_num'] <= 2147483648:
+                    column_string = f'[{column_name}] int'
+                if column['smallest_num'] >= -32768 and column['biggest_num'] <= 32768:
+                    column_string = f'[{column_name}] smallint'
+                if column['smallest_num'] >= 0 and column['biggest_num'] <= 255:
+                    column_string = f'[{column_name}] tinyint'
+            if column['data_type'] == 'boolean':
+                column_string = f'[{column_name}] bit'
+            if column['data_type'] == 'string':
+                padded_length = int(column['max_str_size'] + varchar_padding)
                 if padded_length >= 4000:
-                    column_string = f'[{column}] nvarchar(max)'
+                    column_string = f'[{column_name}] nvarchar(max)'
                 else:
-                    column_string = f'[{column}] nvarchar({padded_length})'
-            if is_id:
-                column_string += f' constraint pk_{table}_{column} primary key'
+                    column_string = f'[{column_name}] nvarchar({padded_length})'
+            if column['is_id']:
+                column_string += f' constraint pk_{table}_{column_name} primary key'
+            if column['is_unique']:
+                column_string += f' constraint ak_{table}_{column_name} unique'
             column_type_list.append(column_string)
 
         column_type_string = ', '.join(column_type_list)
