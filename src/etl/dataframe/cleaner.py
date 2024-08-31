@@ -88,7 +88,7 @@ class Cleaner:
         return df
 
     @staticmethod
-    def clean_all(df: pd.DataFrame):
+    def clean_all_types(df: pd.DataFrame):
         try_functions = [Parser.parse_float, Parser.parse_integer, Parser.parse_boolean, Parser.parse_date]
         for column, series in df.items():
             if series.dropna().empty:
@@ -109,6 +109,12 @@ class Cleaner:
                     pass
         df = df.convert_dtypes()
         return df
+
+    @staticmethod
+    def clean_df(df: pd.DataFrame):
+        df = df.dropna(axis=1, how='all')
+        df = df.dropna(axis=0, how='all')
+        return Cleaner.clean_all_types(df)
 
     @staticmethod
     def generate_hash_column(df: pd.DataFrame, columns_to_hash, new_column_name):

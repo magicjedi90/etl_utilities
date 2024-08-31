@@ -52,17 +52,27 @@ class TestCleaner(unittest.TestCase):
         clean_df = Cleaner.clean_bools(df)
         self.assertEqual(clean_df['bools'].dtype, 'bool')
 
-    def test_clean_all(self):
+    def test_clean_all_types(self):
         df = pd.DataFrame({
             'numbers': ['$1,000', '248166676', '3,000', '%100'],
             'dates': ['2021-01-01', '01/02/2021', '2021-01-01', '01/02/2021'],
             'bools': ['yes', 'no', 'true', 'false'],
             'empty': [None, None, None, None]
         })
-        clean_df = Cleaner.clean_all(df)
+        clean_df = Cleaner.clean_all_types(df)
         self.assertEqual(clean_df['numbers'].dtype, pd.Int64Dtype.name)
         self.assertEqual(clean_df['dates'].dtype, 'datetime64[ns]')
         self.assertEqual(clean_df['bools'].dtype, pd.BooleanDtype.name)
+
+    def test_clean_df(self):
+        df = pd.DataFrame({
+            'numbers': [None, '248166676', '3,000', '%100'],
+            'bools': [None, 'no', 'true', 'false'],
+            'empty': [None, None, None, None]
+        })
+        clean_df = Cleaner.clean_df(df)
+        self.assertEqual(clean_df.shape, (3, 2))
+
 
     def test_generate_hash_column(self):
         df = pd.DataFrame({

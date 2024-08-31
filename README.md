@@ -188,17 +188,30 @@ Cleans columns in the DataFrame that contain boolean values.
 Cleaner.clean_bools(df)
 ```
 
-#### `Cleaner.clean_all(df)`
+#### `Cleaner.clean_all_types(df)`
 
-Attempts to clean all columns in the DataFrame.
+Attempts to clean all column types in the DataFrame.
 
 - **Parameters:** 
   - `df` (*pd.DataFrame*): The DataFrame to be cleaned.
 - **Returns:** 
   - `pd.DataFrame`: The cleaned DataFrame.
-  
+
 ```python
-Cleaner.clean_all(df)
+Cleaner.clean_all_types(df)
+```
+
+#### `Cleaner.clean_df(df)`
+
+Removes empty columns and rows and attempts to clean all column types in the DataFrame.
+
+- **Parameters:** 
+  - `df` (*pd.DataFrame*): The DataFrame to be cleaned.
+- **Returns:** 
+  - `pd.DataFrame`: The cleaned DataFrame.
+
+```python
+Cleaner.clean_df(df)
 ```
 
 #### `Cleaner.generate_hash_column(df, columns_to_hash, new_column_name)`
