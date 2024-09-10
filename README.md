@@ -358,7 +358,7 @@ print(categorical)  # Output: ['A', 'B', 'C']
 categorical = Analyzer.find_categorical_columns(df, .8)
 print(categorical)  # Output: ['A', 'B']
 # Find categorical columns with the default unique threshold of 40 percent
-categorical = Analyzer.find_categorical_columns(df)
+categorical = Analyzer.find_categorical_columns(df, .4)
 print(categorical)  # Output: ['B']
 ```
 
