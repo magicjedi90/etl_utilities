@@ -313,6 +313,62 @@ df = pd.DataFrame({'first': [1, 2, 2], 'second': [None, None, None]})
 candidates = Analyzer.find_empty_columns(df)
 print(candidates)  # Output: ['second']
 ```
+
+#### `find_categorical_columns`
+
+Identifies and returns the list of columns in a Pandas DataFrame that can be considered categorical based on the proportion of unique values in each column.
+
+**Parameters**
+
+- **df** (`pd.DataFrame`): 
+  The DataFrame to inspect for categorical columns.
+
+- **unique_threshold** (`float`, optional, default=`1`): 
+  The threshold ratio of unique values to total non-null values in the column. Columns with a unique value ratio less than or equal to this threshold are classified as categorical. The value must be between 0 and 1.
+
+**Returns**
+
+- **categorical_columns** (`list` of `str`): 
+  A list of column names in the DataFrame that are classified as categorical.
+
+**Raises**
+
+- **ValueError**: 
+  If `unique_threshold` is not between 0 and 1.
+
+**Example**
+
+```python
+import pandas as pd
+from etl.dataframe.analyzer import Analyzer
+
+# Sample DataFrame
+data = {
+    'A': [1, 2, 2, 3, 4],
+    'B': ['cat', 'dog', 'cat', 'dog', 'cat'],
+    'C': [1.1, 2.2, 3.3, 4.4, 5.5]
+}
+
+df = pd.DataFrame(data)
+
+# Find categorical columns with the default unique threshold of 1
+categorical = Analyzer.find_categorical_columns(df)
+print(categorical)  # Output: ['A', 'B', 'C']
+# Find categorical columns with the default unique threshold of 80 percent
+categorical = Analyzer.find_categorical_columns(df, .8)
+print(categorical)  # Output: ['A', 'B']
+# Find categorical columns with the default unique threshold of 40 percent
+categorical = Analyzer.find_categorical_columns(df)
+print(categorical)  # Output: ['B']
+```
+
+**Notes**
+
+- The function evaluates each column in the DataFrame to check if it has a proportion of unique values below or equal to the specified `unique_threshold`.
+- It skips columns that have only null values.
+- This function considers columns with unique values ratio up to the `unique_threshold` to be categorical. Adjust the threshold based on the specific needs of your analysis.
+
+Using this function can help identify columns that are more suitable to involve in categorical analysis, such as encoding for machine learning tasks.
 ### `Creator` Class
 
 Generates SQL queries for creating tables.

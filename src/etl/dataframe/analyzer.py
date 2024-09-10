@@ -95,3 +95,20 @@ class Analyzer:
                 column_metadata['max_str_size'] = largest_string_size
             column_metadata_list.append(column_metadata)
         return column_metadata_list
+
+    @staticmethod
+    def find_categorical_columns(df: pd.DataFrame, unique_threshold: float = 1):
+        if unique_threshold < 0 or unique_threshold > 1:
+            raise ValueError('Unique threshold must be between 0 and 1')
+        categorical_columns = []
+        for column, series in df.items():
+            no_null_series = series.dropna()
+            if no_null_series.empty:
+                continue
+            column_count = no_null_series.size
+            column_unique_count = no_null_series.unique().size
+            unique_pct = column_unique_count / column_count
+            # print(f'{column} has %{unique_pct*100} unique values')
+            if unique_pct <= unique_threshold:
+                categorical_columns.append(column)
+        return categorical_columns

@@ -24,6 +24,13 @@ class TestAnalyzer(unittest.TestCase):
             'second': [1, 1, 2, 2, 3]
         })
 
+        self.df = pd.DataFrame({
+            'A': ['foo', 'bar', 'baz', 'foo', 'bar', 'baz', 'foo', 'foo'],
+            'B': ['one', 'one', 'two', 'three', 'two', 'two', 'one', 'three'],
+            'C': pd.Series(list(range(8))),
+            'D': pd.Series(list(range(8))),
+        })
+
     def test_find_unique_columns(self):
         # Test case with single ID candidate
         expected_candidates = ['id']
@@ -51,6 +58,27 @@ class TestAnalyzer(unittest.TestCase):
         expected_candidates = ['empty']
         actual_candidates = Analyzer.find_empty_columns(self.df_single_id)
         self.assertEqual(expected_candidates, actual_candidates)
+
+    def test_find_categorical_columns_uniformly_distributed(self):
+        result = Analyzer.find_categorical_columns(self.df, 0.5)
+        expected = ['A', 'B']
+        self.assertListEqual(result, expected)
+
+    def test_find_categorical_columns_high_threshold(self):
+        result = Analyzer.find_categorical_columns(self.df, 1)
+        expected = ['A', 'B', 'C', 'D']
+        self.assertListEqual(result, expected)
+
+    def test_find_categorical_columns_low_threshold(self):
+        result = Analyzer.find_categorical_columns(self.df, 0.25)
+        expected = []
+        self.assertListEqual(result, expected)
+
+    def test_find_categorical_columns_invalid_threshold(self):
+        with self.assertRaises(ValueError):
+            Analyzer.find_categorical_columns(self.df, -0.5)
+        with self.assertRaises(ValueError):
+            Analyzer.find_categorical_columns(self.df, 1.5)
 
 if __name__ == '__main__':
     unittest.main()
