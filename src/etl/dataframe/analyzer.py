@@ -20,6 +20,7 @@ class Analyzer:
     def find_unique_column_pairs(df: pd.DataFrame):
         total_records = df.shape[0]
         column_list = df.columns
+        unique_columns = Analyzer.find_unique_columns(df)
         unique_column_pairs = []
         combo_df = pd.DataFrame()
         for column_set in itertools.combinations(column_list, 2):
@@ -27,6 +28,8 @@ class Analyzer:
                 continue
             first_column = column_set[0]
             second_column = column_set[1]
+            if first_column in unique_columns or second_column in unique_columns:
+                continue
             combo_df["combo"] = df[first_column].astype(str) + df[second_column].astype(str)
             combined_unique = combo_df["combo"].unique()
             combined_unique_count = combined_unique.size
