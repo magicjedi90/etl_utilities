@@ -33,7 +33,7 @@ class Loader:
             str_column = series.apply(str)
             max_size = str_column.str.len().max()
             if max_size > 256:
-                row_values.append('cast ( ? as nvarchar(max))')
+                row_values.append('cast ( ? as varchar(21844))')
             else:
                 row_values.append('?')
             # switches from numpy class to python class for bool float and int
