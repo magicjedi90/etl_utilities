@@ -44,9 +44,9 @@ class Loader:
             str_column = series.apply(str)
             max_size = str_column.str.len().max()
             if max_size > 256:
-                row_values.append('cast ( ? as varchar(21844))')
+                row_values.append('cast ( %s as varchar(21844))')
             else:
-                row_values.append('?')
+                row_values.append('%s')
             # switches from numpy class to python class for bool float and int
             if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
                 df[column] = series.tolist()
