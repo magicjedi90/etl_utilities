@@ -77,7 +77,7 @@ class Creator:
                            unique_columns: list[str] = None, history: bool = False,
                            varchar_padding: int = 20, float_precision: int = 10, decimal_places: int = 2,
                            generate_id: bool = False):
-        location = f'{schema}.[{table}]'
+        location = f'{schema}."{table}"'
         column_metadata = Analyzer.generate_column_metadata(df, primary_key, unique_columns, decimal_places)
         column_type_list = []
         if generate_id:
@@ -90,29 +90,29 @@ class Creator:
                 print(f"{column_name} is empty - skipping")
                 continue
             if column['data_type'] == 'datetime':
-                column_string = f'[{column_name}] datetime'
+                column_string = f'"{column_name}" datetime'
             if column['data_type'] == 'float':
                 if float_precision < column['float_precision']:
                     float_precision = column['float_precision']
-                column_string = f'[{column_name}] decimal({float_precision}, {decimal_places})'
+                column_string = f'"{column_name}" decimal({float_precision}, {decimal_places})'
             if column['data_type'] == 'integer':
                 if column['smallest_num'] < -2147483648 or column['biggest_num'] > 2147483648:
-                    column_string = f'[{column_name}] bigint'
+                    column_string = f'"{column_name}" bigint'
                 if column['smallest_num'] >= -2147483648 and column['biggest_num'] <= 2147483648:
-                    column_string = f'[{column_name}] int'
+                    column_string = f'"{column_name}" int'
                 if column['smallest_num'] >= -32768 and column['biggest_num'] <= 32768:
-                    column_string = f'[{column_name}] smallint'
+                    column_string = f'"{column_name}" smallint'
                 if column['smallest_num'] >= -128 and column['biggest_num'] <= 127:
-                    column_string = f'[{column_name}] tinyint'
+                    column_string = f'"{column_name}" tinyint'
             if column['data_type'] == 'boolean':
-                column_string = f'[{column_name}] bit'
+                column_string = f'"{column_name}" bit'
             if column['data_type'] == 'string':
                 padded_length = int(column['max_str_size'] + varchar_padding)
                 if padded_length > 21844:
                     print(f"{column_name} has data too large for storing - skipping")
                     continue
                 else:
-                    column_string = f'[{column_name}] varchar({padded_length})'
+                    column_string = f'"{column_name}" varchar({padded_length})'
             if column['is_id']:
                 key_string = f'constraint pk_{table}_{column_name} primary key ({column_name})'
                 column_type_list.append(key_string)

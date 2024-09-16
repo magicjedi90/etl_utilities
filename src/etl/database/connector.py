@@ -25,7 +25,7 @@ class Connector:
 
     @staticmethod
     def get_mysql_user_connection(host: str, database: str, username: str, password: str):
-        connection_string = f'mysql+pymysql://{username}:{password}@{host}/{database}?charset=utf8mb4"'
+        connection_string = f'mysql+pymysql://{username}:{password}@{host}/{database}?charset=utf8mb4'
         engine = create_engine(connection_string)
         return engine.connect().connection
 

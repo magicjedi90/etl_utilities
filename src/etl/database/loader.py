@@ -5,7 +5,7 @@ from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, M
 from rich import print
 
 
-def insert_to_mssql_db(column_string, cursor, data_list, location, values):
+def insert_to_db(column_string, cursor, data_list, location, values):
     value_list = " union ".join(['select {}'.format(value) for value in values])
     execute_query = (
         f"insert into {location} ({column_string}) {value_list}"
@@ -25,7 +25,18 @@ class Loader:
         column_list = [f'[{column}]' for column in column_list]
         column_string = ", ".join(column_list)
         location = f"{schema}.[{table}]"
+        Loader.insert_to_table(column_string, cursor, df, location, table)
 
+    @staticmethod
+    def insert_to_mysql_table(cursor, df: pd.DataFrame, schema: str, table: str):
+        column_list = df.columns.tolist()
+        column_list = [f'"{column}"' for column in column_list]
+        column_string = ", ".join(column_list)
+        location = f'{schema}."{table}"'
+        Loader.insert_to_table(column_string, cursor, df, location, table)
+
+    @staticmethod
+    def insert_to_table(column_string, cursor, df, location, table):
         row_values = []
         for column in df.columns:
             series = df[column]
@@ -58,12 +69,12 @@ class Loader:
                 data_list.extend(row)
                 next_size = data_count + row_size
                 if next_size >= 2000:
-                    insert_to_mssql_db(column_string, cursor, data_list, location, values)
+                    insert_to_db(column_string, cursor, data_list, location, values)
                     progress.update(upload_task, advance=row_count)
                     values = []
                     data_list = []
                     data_count = 0
                     row_count = 0
             if row_count > 0:
-                insert_to_mssql_db(column_string, cursor, data_list, location, values)
+                insert_to_db(column_string, cursor, data_list, location, values)
                 progress.update(upload_task, advance=row_count)
