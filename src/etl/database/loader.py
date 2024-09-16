@@ -25,18 +25,6 @@ class Loader:
         column_list = [f'[{column}]' for column in column_list]
         column_string = ", ".join(column_list)
         location = f"{schema}.[{table}]"
-        Loader.insert_to_table(column_string, cursor, df, location, table)
-
-    @staticmethod
-    def insert_to_mysql_table(cursor, df: pd.DataFrame, schema: str, table: str):
-        column_list = df.columns.tolist()
-        column_list = [f'`{column}`' for column in column_list]
-        column_string = ", ".join(column_list)
-        location = f'{schema}.`{table}`'
-        Loader.insert_to_table(column_string, cursor, df, location, table)
-
-    @staticmethod
-    def insert_to_table(column_string, cursor, df, location, table):
         row_values = []
         for column in df.columns:
             series = df[column]
@@ -44,12 +32,37 @@ class Loader:
             str_column = series.apply(str)
             max_size = str_column.str.len().max()
             if max_size > 256:
+                row_values.append('cast ( ? as nvarchar(max))')
+            else:
+                row_values.append('?')
+            # switches from numpy class to python class for bool float and int
+            if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
+                df[column] = series.tolist()
+        Loader.insert_to_table(column_string, cursor, df, location, row_values, table)
+
+    @staticmethod
+    def insert_to_mysql_table(cursor, df: pd.DataFrame, schema: str, table: str):
+        column_list = df.columns.tolist()
+        column_list = [f'`{column}`' for column in column_list]
+        column_string = ", ".join(column_list)
+        location = f'{schema}.`{table}`'
+        row_values = []
+        for column in df.columns:
+            series = df[column]
+            series_type = series.dtype
+            str_column = series.apply(str)
+            max_size = str_column.str.len().max()
+            if max_size > 255:
                 row_values.append('cast ( %s as varchar(21844))')
             else:
                 row_values.append('%s')
             # switches from numpy class to python class for bool float and int
             if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
                 df[column] = series.tolist()
+        Loader.insert_to_table(column_string, cursor, df, location, row_values, table)
+
+    @staticmethod
+    def insert_to_table(column_string, cursor, df, location, row_values, table):
         row_value_list = ", ".join(row_values)
         df = df.replace({np.nan: None})
         with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(),
