@@ -77,7 +77,7 @@ class Creator:
                            unique_columns: list[str] = None, history: bool = False,
                            varchar_padding: int = 20, float_precision: int = 10, decimal_places: int = 2,
                            generate_id: bool = False):
-        location = f'{schema}."{table}"'
+        location = f'{schema}.{table}'
         column_metadata = Analyzer.generate_column_metadata(df, primary_key, unique_columns, decimal_places)
         column_type_list = []
         if generate_id:

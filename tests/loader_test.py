@@ -6,7 +6,7 @@ from src.etl.database.loader import Loader
 
 class TestLoader(unittest.TestCase):
 
-    @patch('src.etl.database.loader.insert_to_mssql_db')
+    @patch('src.etl.database.loader.insert_to_db')
     def test_insert_to_mssql_table(self, mock_insert):
         cursor = Mock()
         df = pd.DataFrame({

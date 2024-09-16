@@ -32,7 +32,7 @@ class Loader:
         column_list = df.columns.tolist()
         column_list = [f'"{column}"' for column in column_list]
         column_string = ", ".join(column_list)
-        location = f'{schema}."{table}"'
+        location = f'{schema}.{table}'
         Loader.insert_to_table(column_string, cursor, df, location, table)
 
     @staticmethod
