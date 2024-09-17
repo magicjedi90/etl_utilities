@@ -21,7 +21,7 @@ class Updater:
         )
         if delete_unmatched:
             query = f'{query} when not matched by source then delete'
-        return query
+        return f'{query};'
 
     @staticmethod
     def upsert_mssql(source_schema: str, source_table: str, target_schema: str, target_table: str, columns: list[str],
@@ -54,6 +54,6 @@ class Updater:
         column_string = ','.join(clean_columns)
         query = (
             f'insert into {location} ({column_string}) select {column_string} from {stage}'
-            f'except select {column_string} from {location}'
+            f' except select {column_string} from {location}'
         )
         return query
