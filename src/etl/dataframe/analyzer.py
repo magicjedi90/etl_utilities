@@ -67,11 +67,13 @@ class Analyzer:
                 continue
             try:
                 series.apply(Parser.parse_float)
-                left_digits = int(math.log10(series.max())) + 1
-                float_precision = left_digits + decimal_places
-                column_metadata['data_type'] = 'float'
-                column_metadata['float_precision'] = float_precision
-                column_metadata['decimal_places'] = decimal_places
+                no_null_series = series.dropna()
+                if not no_null_series.eq(0).all():
+                    left_digits = int(math.log10(series.max())) + 1
+                    float_precision = left_digits + decimal_places
+                    column_metadata['data_type'] = 'float'
+                    column_metadata['float_precision'] = float_precision
+                    column_metadata['decimal_places'] = decimal_places
                 series.apply(Parser.parse_integer)
                 biggest_num = series.max()
                 smallest_num = series.min()
