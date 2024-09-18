@@ -18,7 +18,7 @@ class TestInserter(unittest.TestCase):
             ' or a.[value] <> b.[value] or (a.[value] is null and b.[value] is not null) ) '
             'then update set a.[name] = b.[name], a.[value] = b.[value] '
             'when not matched by target then insert ([id], [name], [value]) values (b.[id], b.[name], b.[value]) '
-            'when not matched by source then delete'
+            'when not matched by source then delete;'
         )
 
         actual_query = Updater.merge_mssql(
@@ -45,7 +45,7 @@ class TestInserter(unittest.TestCase):
 
         expected_query = (
             'insert into target_schema.target_table ([id],[name],[value]) select [id],[name],[value] from source_schema.source_table'
-            'except select [id],[name],[value] from target_schema.target_table'
+            ' except select [id],[name],[value] from target_schema.target_table'
         )
 
         actual_query = Updater.append_mssql(

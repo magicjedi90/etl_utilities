@@ -65,7 +65,7 @@ class TestValidator(unittest.TestCase):
         df_columns = df.columns.tolist()
 
         with self.assertRaises(ExtraColumnsException):
-            self.validator._check_extra_columns(df_columns, column_info_df, self.schema, self.table)
+            self.validator._check_extra_columns(df, df_columns, column_info_df, self.schema, self.table)
 
 
     def test_mismatched_columns(self):

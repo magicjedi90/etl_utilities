@@ -1,5 +1,5 @@
 import math
-
+from ..dataframe.analyzer import Analyzer
 from .. import constants
 import pandas as pd
 import numpy as np
@@ -22,7 +22,7 @@ class Validator:
     @staticmethod
     def validate_upload(connection, df: pd.DataFrame, schema: str, table: str):
         df_columns, column_info_df = Validator._fetch_column_info(connection, df, schema, table)
-        Validator._check_extra_columns(df_columns, column_info_df, schema, table)
+        Validator._check_extra_columns(df, df_columns, column_info_df, schema, table)
         Validator._validate_column_types(df, df_columns, column_info_df)
 
     @staticmethod
@@ -36,12 +36,14 @@ class Validator:
         return df_columns, column_info_df
 
     @staticmethod
-    def _check_extra_columns(df_columns, column_info_df, schema, table):
+    def _check_extra_columns(df, df_columns, column_info_df, schema, table):
         db_columns = column_info_df['COLUMN_NAME'].tolist()
         new_columns = np.setdiff1d(df_columns, db_columns)
         if new_columns.size > 0:
-            extra_columns_string = ", ".join(new_columns)
-            type_mismatch_error_message = f'The table {schema}.{table} is missing the following columns: {extra_columns_string}'
+            extra_columns_df = df[new_columns]
+            column_metadata = Analyzer.generate_column_metadata(extra_columns_df, None, None, 2)
+            extra_columns_string = "\n".join([column.__str__() for column in column_metadata])
+            type_mismatch_error_message = f'The table {schema}.{table} is missing the following columns:\n {extra_columns_string}'
             raise ExtraColumnsException(type_mismatch_error_message)
 
     @staticmethod
