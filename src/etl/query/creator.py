@@ -52,23 +52,23 @@ class Creator:
                 column_string += f' constraint ak_{table}_{column_name} unique'
             column_type_list.append(column_string)
 
-        column_type_string = ', '.join(column_type_list)
-        create_query = f'create table {location} ({column_type_string});'
+        column_type_string = ',\n\t'.join(column_type_list)
+        create_query = f'create table {location}\n(\n\t{column_type_string}\n);'
         if history:
             history_location = f'{schema}.[{table}_history]'
             history_insert = (
-                f'{column_type_string}, '
-                'system_record_start datetime2 generated always as row start '
-                f'constraint df_{table}_system_record_start '
-                'default sysutcdatetime() not null, '
-                'system_record_end datetime2 generated always as row end '
-                f'constraint df_{table}_system_record_end '
-                'default sysutcdataetime() not null, '
-                'period for system_time(system_record_start, system_record_end)'
+                f'{column_type_string},\n'
+                '\tsystem_record_start datetime2 generated always as row start\n'
+                f'\t\tconstraint df_{table}_system_record_start\n'
+                '\t\tdefault sysutcdatetime() not null,\n'
+                '\tsystem_record_end datetime2 generated always as row end\n'
+                f'\t\tconstraint df_{table}_system_record_end\n'
+                '\t\tdefault sysutcdataetime() not null,\n'
+                '\t\tperiod for system_time(system_record_start, system_record_end)'
             )
             create_query = (
-                f'create table {location} ({history_insert}) with ('
-                f'system_versioning = on (history_table = {history_location}));'
+                f'create table {location}\n(\n{history_insert}\n) with \n('
+                f'\tsystem_versioning = on (history_table = {history_location})\n);'
             )
         return create_query
 

@@ -89,7 +89,7 @@ class Validator:
     @staticmethod
     def _check_numeric_truncation(column, df, db_column_info):
         if not df[column].max() == 0:
-            df_numeric_precision = int(math.log10(df[column].max())) + 1
+            df_numeric_precision = int(math.log10(abs(df[column].max()))) + 1
             db_column_numeric_precision = db_column_info['NUMERIC_PRECISION']
             if df_numeric_precision > db_column_numeric_precision:
                 return f'{column} needs a minimum of {df_numeric_precision} precision to be inserted'

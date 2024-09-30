@@ -69,7 +69,7 @@ class Analyzer:
                 series.apply(Parser.parse_float)
                 no_null_series = series.dropna()
                 if not no_null_series.eq(0).all():
-                    left_digits = int(math.log10(series.max())) + 1
+                    left_digits = int(math.log10(abs(series.max()))) + 1
                     float_precision = left_digits + decimal_places
                     column_metadata['data_type'] = 'float'
                     column_metadata['float_precision'] = float_precision
