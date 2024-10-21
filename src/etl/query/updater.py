@@ -47,13 +47,17 @@ class Updater:
         return query
 
     @staticmethod
-    def append_mssql(source_schema: str, source_table: str, target_schema: str, target_table: str, columns: list[str]):
+    def append_mssql(source_schema: str, source_table: str, source_columns: list[str], target_schema: str, target_table: str, target_columns: list[str]):
         stage = f'{source_schema}.{source_table}'
         location = f'{target_schema}.{target_table}'
-        clean_columns = [f'[{column}]' for column in columns]
-        column_string = ','.join(clean_columns)
+        clean_target_columns = [f'[{column}]' for column in target_columns]
+        clean_source_columns = [f'[{column}]' for column in source_columns]
+
+        target_column_string = ','.join(clean_target_columns)
+        source_column_string = ','.join(clean_source_columns)
+
         query = (
-            f'insert into {location} ({column_string}) select {column_string} from {stage}'
-            f' except select {column_string} from {location}'
+            f'insert into {location} ({target_column_string}) select {source_column_string} from {stage}'
+            f' except select {target_column_string} from {location}'
         )
         return query
