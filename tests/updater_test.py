@@ -49,7 +49,7 @@ class TestInserter(unittest.TestCase):
         )
 
         actual_query = Updater.append_mssql(
-            self.source_schema, self.source_table, self.target_schema, self.target_table, self.columns
+            self.source_schema, self.source_table, self.columns, self.target_schema, self.target_table, self.columns
         )
 
         self.assertEqual(expected_query, actual_query)

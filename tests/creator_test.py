@@ -18,20 +18,22 @@ class TestTableMaker(unittest.TestCase):
         })
 
         expected_query = (
-            "create table dbo.[test_table] ("
-            "[id_column] bigint constraint pk_test_table_id_column primary key, "
-            "[int_column] tinyint, "
-            "[float_column] decimal(10, 2), "
-            "[date_column] datetime2, "
-            "[bool_column] bit, "
-            "[str_column] nvarchar(23), "
-            "[empty_column] nvarchar(max), "
-            "system_record_start datetime2 generated always as row start "
-            "constraint df_test_table_system_record_start default sysutcdatetime() not null, "
-            "system_record_end datetime2 generated always as row end "
-            "constraint df_test_table_system_record_end default sysutcdataetime() not null, "
-            "period for system_time(system_record_start, system_record_end)) "
-            "with (system_versioning = on (history_table = dbo.[test_table_history]));"
+            "create table dbo.[test_table]\n(\n"
+            "[id_column] bigint constraint pk_test_table_id_column primary key,\n"
+            "\t[int_column] tinyint,\n"
+            "\t[float_column] decimal(10, 2),\n"
+            "\t[date_column] datetime2,\n"
+            "\t[bool_column] bit,\n"
+            "\t[str_column] nvarchar(23),\n"
+            "\t[empty_column] nvarchar(max),\n"
+            "\tsystem_record_start datetime2 generated always as row start\n"
+            "\t\tconstraint df_test_table_system_record_start\n"
+            "\t\tdefault sysutcdatetime() not null,\n"
+            "\tsystem_record_end datetime2 generated always as row end\n"
+            "\t\tconstraint df_test_table_system_record_end\n"
+            "\t\tdefault sysutcdataetime() not null,\n"
+            "\t\tperiod for system_time(system_record_start, system_record_end)\n)"
+            " with \n(\tsystem_versioning = on (history_table = dbo.[test_table_history])\n);"
         )
 
         actual_query = Creator.create_mssql_table(df, 'dbo', 'test_table',
