@@ -14,7 +14,7 @@ class TestInserter(unittest.TestCase):
     def test_merge_mssql(self):
         expected_query = (
             'merge target_schema.target_table a using source_schema.source_table b on a.[id] = b.[id] '
-            'when matched  and (a.[name] <> b.[name] or (a.[name] is null and b.[name] is not null) '
+            'when matched and (a.[name] <> b.[name] or (a.[name] is null and b.[name] is not null) '
             ' or a.[value] <> b.[value] or (a.[value] is null and b.[value] is not null) ) '
             'then update set a.[name] = b.[name], a.[value] = b.[value] '
             'when not matched by target then insert ([id], [name], [value]) values (b.[id], b.[name], b.[value]) '
@@ -22,7 +22,7 @@ class TestInserter(unittest.TestCase):
         )
 
         actual_query = Updater.merge_mssql(
-            self.source_schema, self.source_table, self.target_schema, self.target_table, self.columns, self.id_column
+            self.source_schema, self.source_table, self.columns, self.id_column, self.target_schema, self.target_table, self.columns, self.id_column
         )
 
         self.assertEqual(expected_query, actual_query)
@@ -36,7 +36,7 @@ class TestInserter(unittest.TestCase):
         )
 
         actual_query = Updater.upsert_mssql(
-            self.source_schema, self.source_table, self.target_schema, self.target_table, self.columns, self.id_column
+            self.source_schema, self.source_table, self.columns, self.id_column, self.target_schema, self.target_table, self.columns, self.id_column
         )
 
         self.assertEqual(expected_query, actual_query)
