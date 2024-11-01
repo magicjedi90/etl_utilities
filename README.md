@@ -378,13 +378,13 @@ Generates a SQL CREATE TABLE statement based on a DataFrame.
 ### `Updater` Class
 
 Generates SQL queries for inserting and merging data.
-#### `Updater.merge_mssql(source_schema, source_table, target_schema, target_table, columns, id_column, delete_unmatched=True)`
+#### `Updater.merge_mssql(source_schema, source_table, source_columns, source_id_column, target_schema, target_table, target_columns, target_id_column, delete_unmatched=True)`
 
 Generates a SQL MERGE statement.
-#### `Updater.upsert_mssql(source_schema, source_table, target_schema, target_table, columns, id_column)`
+#### `Updater.upsert_mssql(source_schema, source_table, source_columns, source_id_column, target_schema, target_table, target_columns, target_id_column)`
 
 Generates a SQL UPSERT statement.
-#### `Updater.append_mssql(source_schema, source_table, target_schema, target_table, columns)`
+#### `Updater.append_mssql(source_schema, source_table, source_columns, target_schema, target_table, target_columns)`
 
 Generates a SQL INSERT statement with EXCEPT.
 

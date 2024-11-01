@@ -13,11 +13,18 @@ class TestInserter(unittest.TestCase):
 
     def test_merge_mssql(self):
         expected_query = (
-            'merge target_schema.target_table a using source_schema.source_table b on a.[id] = b.[id] '
+            'merge target_schema.target_table a\n'
+            'using source_schema.source_table b\n'
+            'on a.[id] = b.[id]\n'
             'when matched and (a.[name] <> b.[name] or (a.[name] is null and b.[name] is not null) '
             ' or a.[value] <> b.[value] or (a.[value] is null and b.[value] is not null) ) '
-            'then update set a.[name] = b.[name], a.[value] = b.[value] '
-            'when not matched by target then insert ([id], [name], [value]) values (b.[id], b.[name], b.[value]) '
+            'then\n'
+            '\tupdate\n'
+            '\tset a.[name] = b.[name],\n'
+            '\t\ta.[value] = b.[value]\n'
+            'when not matched by target then\n'
+            '\tinsert ([id], [name], [value])\n'
+            '\tvalues (b.[id], b.[name], b.[value])\n'
             'when not matched by source then delete;'
         )
 

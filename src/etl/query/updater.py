@@ -20,15 +20,21 @@ class Updater:
             [f'a.{column[0]} <> b.{column[1]} or (a.{column[0]} is null and b.{column[1]} is not null) ' for column in
              comparison_list if column[0] != target_id_column]
         )
-        update_str = ', '.join(
+        update_str = ',\n\t\t'.join(
             [f'a.{column[0]} = b.{column[1]}' for column in comparison_list if column[0] != target_id_column])
         query = (
-            f'merge {location} a using {stage} b on a.{target_id_column} = b.{source_id_column} '
-            f'when matched and ({comparison_str}) then update set {update_str} '
-            f'when not matched by target then insert ({target_columns_str}) values ({source_columns_str})'
+            f'merge {location} a\n'
+            f'using {stage} b\n'
+            f'on a.{target_id_column} = b.{source_id_column}\n'
+            f'when matched and ({comparison_str}) then\n'
+            f'\tupdate\n'
+            f'\tset {update_str}\n'
+            f'when not matched by target then\n'
+            f'\tinsert ({target_columns_str})\n'
+            f'\tvalues ({source_columns_str})'
         )
         if delete_unmatched:
-            query = f'{query} when not matched by source then delete'
+            query = f'{query}\nwhen not matched by source then delete'
         return f'{query};'
 
     @staticmethod
