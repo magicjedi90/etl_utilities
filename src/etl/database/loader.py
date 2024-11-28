@@ -19,6 +19,12 @@ def insert_to_db(column_string, cursor, data_list, location, values):
 
 
 class Loader:
+    def __init__(self, cursor, df: pd.DataFrame, schema: str, table: str):
+        self._cursor = cursor
+        self._df = df
+        self._schema = schema
+        self._table = table
+
     @staticmethod
     def insert_to_mssql_table(cursor, df: pd.DataFrame, schema: str, table: str):
         column_list = df.columns.tolist()
@@ -91,3 +97,9 @@ class Loader:
             if row_count > 0:
                 insert_to_db(column_string, cursor, data_list, location, values)
                 progress.update(upload_task, advance=row_count)
+
+    def to_mysql_table(self):
+        return self.insert_to_mysql_table(self._cursor, self._df, self._schema, self._table)
+
+    def to_mssql_table(self):
+        return self.insert_to_mssql_table(self._cursor, self._df, self._schema, self._table)

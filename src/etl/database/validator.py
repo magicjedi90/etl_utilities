@@ -19,6 +19,12 @@ class Validator:
         ExtraColumnsException: If the DataFrame has extra columns not present in the database table.
         ColumnDataException: If there are type mismatches or truncation issues with the columns in the DataFrame.
     """
+    def __init__(self, connection, df: pd.DataFrame, schema: str, table: str):
+        self._connection = connection
+        self._df = df
+        self._schema = schema
+        self._table = table
+
     @staticmethod
     def validate_upload(connection, df: pd.DataFrame, schema: str, table: str):
         df_columns, column_info_df = Validator._fetch_column_info(connection, df, schema, table)
@@ -104,6 +110,8 @@ class Validator:
         if db_column_string_length and df_max_string_length > db_column_string_length:
             return f'{column} needs a minimum of {df_max_string_length} size to be inserted'
 
+    def validate(self):
+        return self.validate_upload(self._connection, self._df, self._schema, self._table)
 
 class ExtraColumnsException(Exception):
     """

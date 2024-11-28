@@ -4,6 +4,21 @@ from rich import print
 
 
 class Creator:
+    def __init__(self, df: pd.DataFrame, schema: str, table: str, primary_key: str = None,
+                 unique_columns: list[str] = None, history: bool = False,
+                 varchar_padding: int = 20, float_precision: int = 10, decimal_places: int = 2,
+                 generate_id: bool = False):
+        self._df = df
+        self._schema = schema
+        self._table = table
+        self._primary_key = primary_key
+        self._unique_columns = unique_columns
+        self._history = history
+        self._varchar_padding = varchar_padding
+        self._float_precision = float_precision
+        self._decimal_places = decimal_places
+        self._generate_id = generate_id
+
     @staticmethod
     def create_mssql_table(df: pd.DataFrame, schema: str, table: str, primary_key: str = None,
                            unique_columns: list[str] = None, history: bool = False,
@@ -74,9 +89,9 @@ class Creator:
 
     @staticmethod
     def create_mariadb_table(df: pd.DataFrame, schema: str, table: str, primary_key: str = None,
-                           unique_columns: list[str] = None, history: bool = False,
-                           varchar_padding: int = 20, float_precision: int = 10, decimal_places: int = 2,
-                           generate_id: bool = False):
+                             unique_columns: list[str] = None, history: bool = False,
+                             varchar_padding: int = 20, float_precision: int = 10, decimal_places: int = 2,
+                             generate_id: bool = False):
         location = f'{schema}.{table}'
         column_metadata = Analyzer.generate_column_metadata(df, primary_key, unique_columns, decimal_places)
         column_type_list = []
@@ -129,3 +144,14 @@ class Creator:
                 f'system_versioning;'
             )
         return create_query
+
+    # generate convenience methods that use the classes variables and above static methods
+    def new_mssql_table(self):
+        return Creator.create_mssql_table(self._df, self._schema, self._table, self._primary_key, self._unique_columns,
+                                          self._history, self._varchar_padding, self._float_precision,
+                                          self._decimal_places, self._generate_id)
+
+    def new_mariadb_table(self):
+        return Creator.create_mariadb_table(self._df, self._schema, self._table, self._primary_key,
+                                            self._unique_columns, self._history, self._varchar_padding,
+                                            self._float_precision, self._decimal_places, self._generate_id)

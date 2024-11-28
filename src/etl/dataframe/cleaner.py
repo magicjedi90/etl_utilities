@@ -45,6 +45,8 @@ class Cleaner:
     The `generate_hash_column` static method takes a DataFrame, a list of column names to hash, and a new column name as input. It computes a hash value for each row based on the specified columns and adds a new column with the hash values to the DataFrame.
     The `coalesce_columns` static method takes a DataFrame, a list of columns to coalesce, a target column name, and an optional drop flag as input. It coalesces the specified columns by filling missing values with the previous non-null value in each row and creates or consolidates the target column with the coalesced values. If the drop flag is True, the method drops the original columns from the DataFrame.
     """
+    def __init__(self, df: pd.DataFrame):
+        self._df = df
 
     @staticmethod
     def column_names_to_snake_case(df: pd.DataFrame):
@@ -129,3 +131,25 @@ class Cleaner:
                 columns_to_coalesce.remove(target_column)
             df = df.drop(columns=columns_to_coalesce)
         return df
+
+    def apply_snake_case(self):
+        Cleaner.column_names_to_snake_case(self._df)
+
+    def apply_pascal_case(self):
+        Cleaner.column_names_to_pascal_case(self._df)
+
+    def on_numbers(self):
+        self._df = Cleaner.clean_numbers(self._df)
+
+    def on_dates(self):
+        self._df = Cleaner.clean_dates(self._df)
+
+    def on_booleans(self):
+        self._df = Cleaner.clean_bools(self._df)
+
+    def on_all_datatypes(self):
+        self._df = Cleaner.clean_all_types(self._df)
+
+    def on_df(self):
+        self._df = Cleaner.clean_df(self._df)
+
