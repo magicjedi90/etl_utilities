@@ -67,6 +67,3 @@ if __name__ == '__main__':
     logger_instance.warning('This is an warning message from the singleton logger!')
     logger_instance.error('This is an error message from the singleton logger!')
     logger_instance.critical('This is a critical message from the singleton logger!')
-
-
-
