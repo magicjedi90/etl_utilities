@@ -1,6 +1,7 @@
 import pandas as pd
 from ..dataframe.analyzer import Analyzer
-from rich import print
+from ..logger import Logger
+logger = Logger().get_logger()
 
 
 class Creator:
@@ -34,7 +35,7 @@ class Creator:
             column_string = None
             column_name = column['column_name']
             if column['is_empty']:
-                print(f"{column_name} is empty - setting to nvarchar(max)")
+                logger.info(f"{column_name} is empty - setting to nvarchar(max)")
                 column_string = f'[{column_name}] nvarchar(max)'
                 column_type_list.append(column_string)
                 continue
@@ -102,7 +103,7 @@ class Creator:
             column_string = None
             column_name = column['column_name']
             if column['is_empty']:
-                print(f"{column_name} is empty - skipping")
+                logger.info(f"{column_name} is empty - skipping")
                 continue
             if column['data_type'] == 'datetime':
                 column_string = f'`{column_name}` datetime'
@@ -124,7 +125,7 @@ class Creator:
             if column['data_type'] == 'string':
                 padded_length = int(column['max_str_size'] + varchar_padding)
                 if padded_length > 21844:
-                    print(f"{column_name} has data too large for storing - skipping")
+                    logger.info(f"{column_name} has data too large for storing - skipping")
                     continue
                 else:
                     column_string = f'`{column_name}` varchar({padded_length})'

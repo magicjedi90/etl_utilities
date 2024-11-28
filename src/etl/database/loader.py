@@ -2,19 +2,23 @@ from .. import constants
 import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
-from rich import print
+from ..logger import Logger
+logger = Logger().get_logger()
 
-
-def insert_to_db(column_string, cursor, data_list, location, values):
-    value_list = " union ".join(['select {}'.format(value) for value in values])
+def insert_to_db(column_string, cursor, data_list, location, row_placeholders):
+    # inserts each row using a union select
+    row_list = " union ".join(['select {}'.format(row) for row in row_placeholders])
     execute_query = (
-        f"insert into {location} ({column_string}) {value_list}"
+        f"insert into {location} ({column_string}) {row_list}"
     )
     try:
+        logger.debug(f'Execute Query:\n{execute_query}')
+        logger.debug(
+            f'Data List:\n{data_list}')
         cursor.execute(execute_query, data_list)
     except Exception as e:
-        print(execute_query)
-        print(data_list)
+        logger.error(execute_query)
+        logger.error(data_list)
         raise e
 
 
@@ -31,20 +35,20 @@ class Loader:
         column_list = [f'[{column}]' for column in column_list]
         column_string = ", ".join(column_list)
         location = f"{schema}.[{table}]"
-        row_values = []
+        placeholders = []
         for column in df.columns:
             series = df[column]
             series_type = series.dtype
             str_column = series.apply(str)
             max_size = str_column.str.len().max()
             if max_size > 256:
-                row_values.append('cast ( ? as nvarchar(max))')
+                placeholders.append('cast ( ? as nvarchar(max))')
             else:
-                row_values.append('?')
+                placeholders.append('?')
             # switches from numpy class to python class for bool float and int
             if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
                 df[column] = series.tolist()
-        Loader.insert_to_table(column_string, cursor, df, location, row_values, table)
+        Loader.insert_to_table(column_string, cursor, df, location, placeholders, table)
 
     @staticmethod
     def insert_to_mysql_table(cursor, df: pd.DataFrame, schema: str, table: str):
@@ -52,29 +56,29 @@ class Loader:
         column_list = [f'`{column}`' for column in column_list]
         column_string = ", ".join(column_list)
         location = f'{schema}.`{table}`'
-        row_values = []
+        placeholders = []
         for column in df.columns:
             series = df[column]
             series_type = series.dtype
             str_column = series.apply(str)
             max_size = str_column.str.len().max()
             if max_size > 255:
-                row_values.append('cast ( %s as varchar(21844))')
+                placeholders.append('cast ( %s as varchar(21844))')
             else:
-                row_values.append('%s')
+                placeholders.append('%s')
             # switches from numpy class to python class for bool float and int
             if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
                 df[column] = series.tolist()
-        Loader.insert_to_table(column_string, cursor, df, location, row_values, table)
+        Loader.insert_to_table(column_string, cursor, df, location, placeholders, table)
 
     @staticmethod
-    def insert_to_table(column_string, cursor, df, location, row_values, table):
-        row_value_list = ", ".join(row_values)
+    def insert_to_table(column_string, cursor, df, location, placeholders, table):
+        placeholder_list = ", ".join(placeholders)
         df = df.replace({np.nan: None})
         with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(),
                       MofNCompleteColumn()) as progress:
             total = df.shape[0]
-            values = []
+            row_placeholder = []
             data_list = []
             data_count = 0
             row_count = 0
@@ -83,19 +87,19 @@ class Loader:
                 row_size = len(row)
                 row_count += 1
                 data_count += row_size
-                values.append(row_value_list)
+                row_placeholder.append(placeholder_list)
 
                 data_list.extend(row)
                 next_size = data_count + row_size
                 if next_size >= 2000:
-                    insert_to_db(column_string, cursor, data_list, location, values)
+                    insert_to_db(column_string, cursor, data_list, location, row_placeholder)
                     progress.update(upload_task, advance=row_count)
-                    values = []
+                    row_placeholder = []
                     data_list = []
                     data_count = 0
                     row_count = 0
             if row_count > 0:
-                insert_to_db(column_string, cursor, data_list, location, values)
+                insert_to_db(column_string, cursor, data_list, location, row_placeholder)
                 progress.update(upload_task, advance=row_count)
 
     def to_mysql_table(self):

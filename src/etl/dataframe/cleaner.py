@@ -1,9 +1,10 @@
 import hashlib
 import re
 import pandas as pd
-from rich import print
 from dateutil import parser
 from ..dataframe.parser import Parser
+from ..logger import Logger
+logger = Logger().get_logger()
 
 def compute_hash(value):
     """
@@ -94,7 +95,7 @@ class Cleaner:
         try_functions = [Parser.parse_float, Parser.parse_integer, Parser.parse_boolean, Parser.parse_date]
         for column, series in df.items():
             if series.dropna().empty:
-                print(f'{column} is empty skipping cleaning')
+                logger.info(f'{column} is empty skipping cleaning')
                 df[column] = df[column].astype(str)
                 continue
             is_column_clean = False
@@ -105,10 +106,9 @@ class Cleaner:
                     series = Cleaner.clean_series(series, func)
                     df[column] = series
                     is_column_clean = True
-                    print(f'{column} was cleaned with {func.__name__}')
+                    logger.info(f'{column} was cleaned with {func.__name__}')
                 except (ValueError, TypeError, parser.ParserError, OverflowError) as error:
-                    # print(f'{column} failed cleaning with {func.__name__}: {error}')
-                    pass
+                    logger.debug(f'{column} failed cleaning with {func.__name__}: {error}')
         df = df.convert_dtypes()
         return df
 

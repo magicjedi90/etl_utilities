@@ -3,7 +3,8 @@ from ..dataframe.analyzer import Analyzer
 from .. import constants
 import pandas as pd
 import numpy as np
-
+from ..logger import Logger
+logger = Logger().get_logger()
 
 class Validator:
     """
@@ -59,7 +60,7 @@ class Validator:
 
         for column in df_columns:
             if df[column].dropna().empty:
-                print(f'{column} is empty skipping type validation')
+                logger.info(f'{column} is empty skipping type validation')
                 continue
             db_column_info = column_info_df[column_info_df['COLUMN_NAME'] == column].iloc[0]
             db_column_data_type = db_column_info['DATA_TYPE']
