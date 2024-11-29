@@ -31,7 +31,7 @@ class Loader:
 
     @staticmethod
     def insert_to_mssql_table(cursor, df: pd.DataFrame, schema: str, table: str):
-        column_string, location, placeholders = Loader.prepare_mssql_data(df, schema, table)
+        df, column_string, location, placeholders = Loader.prepare_mssql_data(df, schema, table)
         Loader.insert_to_table(column_string, cursor, df, location, placeholders, table)
 
     @staticmethod
