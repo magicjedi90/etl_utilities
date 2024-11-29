@@ -140,3 +140,6 @@ class Loader:
 
     def to_mssql_table(self):
         return self.insert_to_mssql_table(self._cursor, self._df, self._schema, self._table)
+
+    def batch_to_mssql_table(self, batch_size: int = 1000):
+        return self.batch_insert_to_mssql_table(self._cursor, self._df, self._schema, self._table, batch_size)
