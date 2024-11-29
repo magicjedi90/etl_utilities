@@ -3,7 +3,8 @@ from ..dataframe.analyzer import Analyzer
 from .. import constants
 import pandas as pd
 import numpy as np
-
+from ..logger import Logger
+logger = Logger().get_logger()
 
 class Validator:
     """
@@ -19,6 +20,12 @@ class Validator:
         ExtraColumnsException: If the DataFrame has extra columns not present in the database table.
         ColumnDataException: If there are type mismatches or truncation issues with the columns in the DataFrame.
     """
+    def __init__(self, connection, df: pd.DataFrame, schema: str, table: str):
+        self._connection = connection
+        self._df = df
+        self._schema = schema
+        self._table = table
+
     @staticmethod
     def validate_upload(connection, df: pd.DataFrame, schema: str, table: str):
         df_columns, column_info_df = Validator._fetch_column_info(connection, df, schema, table)
@@ -53,7 +60,7 @@ class Validator:
 
         for column in df_columns:
             if df[column].dropna().empty:
-                print(f'{column} is empty skipping type validation')
+                logger.info(f'{column} is empty skipping type validation')
                 continue
             db_column_info = column_info_df[column_info_df['COLUMN_NAME'] == column].iloc[0]
             db_column_data_type = db_column_info['DATA_TYPE']
@@ -104,6 +111,8 @@ class Validator:
         if db_column_string_length and df_max_string_length > db_column_string_length:
             return f'{column} needs a minimum of {df_max_string_length} size to be inserted'
 
+    def validate(self):
+        return self.validate_upload(self._connection, self._df, self._schema, self._table)
 
 class ExtraColumnsException(Exception):
     """

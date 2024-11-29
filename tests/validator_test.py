@@ -11,7 +11,6 @@ class TestValidator(unittest.TestCase):
         self.connection = Mock()  # Mock your database connection
         self.schema = "test_schema"
         self.table = "test_table"
-        self.validator = Validator()
 
     @patch('pandas.read_sql')
     def test_validate_upload(self, mock_read_sql):
@@ -50,7 +49,7 @@ class TestValidator(unittest.TestCase):
         df_columns = df.columns.tolist()
 
         with self.assertRaises(ColumnDataException):
-            self.validator._validate_column_types(df, df_columns, column_info_df)
+            Validator._validate_column_types(df, df_columns, column_info_df)
 
     def test_extra_columns_exception(self):
         # Create a DataFrame with extra columns
@@ -65,7 +64,7 @@ class TestValidator(unittest.TestCase):
         df_columns = df.columns.tolist()
 
         with self.assertRaises(ExtraColumnsException):
-            self.validator._check_extra_columns(df, df_columns, column_info_df, self.schema, self.table)
+            Validator._check_extra_columns(df, df_columns, column_info_df, self.schema, self.table)
 
 
     def test_mismatched_columns(self):
@@ -81,7 +80,7 @@ class TestValidator(unittest.TestCase):
         df_columns = df.columns.tolist()
 
         with self.assertRaises(ColumnDataException):
-            self.validator._validate_column_types(df, df_columns, column_info_df)
+            Validator._validate_column_types(df, df_columns, column_info_df)
 
 
 if __name__ == '__main__':
