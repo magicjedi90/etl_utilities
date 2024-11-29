@@ -31,6 +31,11 @@ class Loader:
 
     @staticmethod
     def insert_to_mssql_table(cursor, df: pd.DataFrame, schema: str, table: str):
+        column_string, location, placeholders = Loader.prepare_mssql_data(df, schema, table)
+        Loader.insert_to_table(column_string, cursor, df, location, placeholders, table)
+
+    @staticmethod
+    def prepare_mssql_data(df, schema, table):
         column_list = df.columns.tolist()
         column_list = [f'[{column}]' for column in column_list]
         column_string = ", ".join(column_list)
@@ -48,7 +53,35 @@ class Loader:
             # switches from numpy class to python class for bool float and int
             if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
                 df[column] = series.tolist()
-        Loader.insert_to_table(column_string, cursor, df, location, placeholders, table)
+        return column_string, location, placeholders
+
+    @staticmethod
+    def batch_insert_to_mssql_table(cursor, df: pd.DataFrame, schema: str, table: str, batch_size: int = 1000):
+        column_string, location, placeholders = Loader.prepare_mssql_data(df, schema, table)
+        df = df.replace({np.nan: None})
+        query = f'INSERT INTO {location} ({column_string}) VALUES ({placeholders});'
+        logger.debug(f'Query: {query}')
+
+        # Convert DataFrame to list of tuples
+        data = [tuple(row) for row in df.itertuples(index=False, name=None)]
+
+        # Perform the bulk insert
+        cursor.fast_executemany = True
+
+        with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(),
+                      MofNCompleteColumn()) as progress:
+            upload_task = progress.add_task(f'loading {table}', total=len(data))
+
+            try:
+                for i in range(0, len(data), batch_size):
+                    row_count = i + batch_size
+                    cursor.executemany(query, data[i:row_count])
+                    progress.update(upload_task, advance=row_count)
+                logger.info(f'Inserted {len(data)} rows into {location}.')
+            except Exception as e:
+                cursor.rollback()
+                logger.error(f'Error inserting data into {location}: {str(e)}')
+                raise RuntimeError(f'Error inserting data into {location}: {str(e)}')
 
     @staticmethod
     def insert_to_mysql_table(cursor, df: pd.DataFrame, schema: str, table: str):
