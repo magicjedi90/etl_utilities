@@ -53,11 +53,11 @@ class Loader:
             # switches from numpy class to python class for bool float and int
             if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
                 df[column] = series.tolist()
-        return column_string, location, placeholders
+        return df, column_string, location, placeholders
 
     @staticmethod
     def batch_insert_to_mssql_table(cursor, df: pd.DataFrame, schema: str, table: str, batch_size: int = 1000):
-        column_string, location, placeholders = Loader.prepare_mssql_data(df, schema, table)
+        df, column_string, location, placeholders = Loader.prepare_mssql_data(df, schema, table)
         df = df.replace({np.nan: None})
         query = f'INSERT INTO {location} ({column_string}) VALUES ({placeholders});'
         logger.debug(f'Query: {query}')
