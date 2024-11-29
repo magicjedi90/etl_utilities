@@ -18,7 +18,7 @@ class BulkLoader:
         self.table_name = table_name
         self.logger = Logger().get_logger()
 
-    def bulk_insert(self, df: pd.DataFrame, batch_size: int = 1000):
+    def bulk_insert(self, df: pd.DataFrame, batch_size: int = 1000) -> None:
         """
         Bulk inserts a DataFrame into a table in the database.
 
@@ -31,6 +31,7 @@ class BulkLoader:
         if df.empty:
             raise ValueError('DataFrame is empty.')
 
+        # Convert data types to object and replace NaN with None
         df = df.astype(object).where(pd.notnull(df), None)
 
         # Prepare SQL query
