@@ -27,7 +27,7 @@ class ColoredFormatter(logging.Formatter):
 class Logger:
     _instance = None
 
-    def __new__(cls, name: str = 'default_logger', level: int = logging.DEBUG):
+    def __new__(cls, name: str = 'default_logger', level: int = logging.INFO):
         if cls._instance is None:
             # Create a new instance and configure it
             cls._instance = super(Logger, cls).__new__(cls)

@@ -1,10 +1,12 @@
+from datetime import datetime
+
 import pandas as pd
 from dateutil import parser
 
 
 class Parser:
     @staticmethod
-    def parse_boolean(value):
+    def parse_boolean(value) -> bool | None:
         """
         Function to parse a boolean value from a given input.
         :param value: The value to be parsed as a boolean.
@@ -24,7 +26,7 @@ class Parser:
             raise ValueError(f"Invalid truth value: {value}")
 
     @staticmethod
-    def parse_float(value):
+    def parse_float(value) -> float | None:
         """
         Function to parse a given value as a float.
         :param value: The value to parse as a float.
@@ -36,7 +38,7 @@ class Parser:
         return float(cleaned_value)
 
     @staticmethod
-    def parse_date(value):
+    def parse_date(value) -> datetime | None:
         """
         This function is used to parse a date value.
         :param value: The value to be parsed as a date.
@@ -47,7 +49,7 @@ class Parser:
         return parser.parse(str(value).strip())
 
     @staticmethod
-    def parse_integer(value):
+    def parse_integer(value) -> int | None:
         """
         Parses an input value to an integer.
         :param value: The value to be parsed.

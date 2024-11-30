@@ -6,7 +6,7 @@ from ..dataframe.parser import Parser
 from ..logger import Logger
 logger = Logger().get_logger()
 
-def compute_hash(value):
+def compute_hash(value) -> str:
     """
     Compute Hash
     Calculate the SHA-1 hash value of the given input value.
@@ -17,7 +17,7 @@ def compute_hash(value):
 
 
 # Helper function to standardize column names
-def standardize_column_name(name):
+def standardize_column_name(name) -> str:
     """
     This function standardizes a given column name by removing special characters, replacing certain characters with new ones, and converting it to lowercase with underscores as separators.
     :param name: the column name to be standardized
@@ -46,19 +46,17 @@ class Cleaner:
     The `generate_hash_column` static method takes a DataFrame, a list of column names to hash, and a new column name as input. It computes a hash value for each row based on the specified columns and adds a new column with the hash values to the DataFrame.
     The `coalesce_columns` static method takes a DataFrame, a list of columns to coalesce, a target column name, and an optional drop flag as input. It coalesces the specified columns by filling missing values with the previous non-null value in each row and creates or consolidates the target column with the coalesced values. If the drop flag is True, the method drops the original columns from the DataFrame.
     """
-    def __init__(self, df: pd.DataFrame):
-        self._df = df
 
     @staticmethod
-    def column_names_to_snake_case(df: pd.DataFrame):
+    def column_names_to_snake_case(df: pd.DataFrame) -> None:
         df.columns = [standardize_column_name(name) for name in df.columns]
 
     @staticmethod
-    def column_names_to_pascal_case(df: pd.DataFrame):
+    def column_names_to_pascal_case(df: pd.DataFrame) -> None:
         df.columns = ["".join(standardize_column_name(name).title().split('_')) for name in df.columns]
 
     @staticmethod
-    def clean_series(series: pd.Series, clean_function):
+    def clean_series(series: pd.Series, clean_function) -> pd.Series:
         try:
             cleaned_series = series.apply(clean_function)
             series_dtype = clean_function.__annotations__.get('return', None)
@@ -69,7 +67,7 @@ class Cleaner:
             raise
 
     @staticmethod
-    def clean_numbers(df: pd.DataFrame):
+    def clean_numbers(df: pd.DataFrame) -> pd.DataFrame:
         for column, series in df.items():
             df[column] = Cleaner.clean_series(series, Parser.parse_float)
             try:
@@ -79,19 +77,19 @@ class Cleaner:
         return df
 
     @staticmethod
-    def clean_dates(df: pd.DataFrame):
+    def clean_dates(df: pd.DataFrame) -> pd.DataFrame:
         for column, series in df.items():
             df[column] = Cleaner.clean_series(series, Parser.parse_date)
         return df
 
     @staticmethod
-    def clean_bools(df: pd.DataFrame):
+    def clean_bools(df: pd.DataFrame) -> pd.DataFrame:
         for column, series in df.items():
             df[column] = Cleaner.clean_series(series, Parser.parse_boolean)
         return df
 
     @staticmethod
-    def clean_all_types(df: pd.DataFrame):
+    def clean_all_types(df: pd.DataFrame) -> pd.DataFrame:
         try_functions = [Parser.parse_float, Parser.parse_integer, Parser.parse_boolean, Parser.parse_date]
         for column, series in df.items():
             if series.dropna().empty:
@@ -113,43 +111,21 @@ class Cleaner:
         return df
 
     @staticmethod
-    def clean_df(df: pd.DataFrame):
+    def clean_df(df: pd.DataFrame) -> pd.DataFrame:
         df = df.dropna(axis=1, how='all')
         df = df.dropna(axis=0, how='all')
         return Cleaner.clean_all_types(df)
 
     @staticmethod
-    def generate_hash_column(df: pd.DataFrame, columns_to_hash, new_column_name):
+    def generate_hash_column(df: pd.DataFrame, columns_to_hash, new_column_name) -> pd.DataFrame:
         df[new_column_name] = df[columns_to_hash].astype(str).sum(axis=1).apply(compute_hash)
         return df
 
     @staticmethod
-    def coalesce_columns(df: pd.DataFrame, columns_to_coalesce, target_column, drop=False):
+    def coalesce_columns(df: pd.DataFrame, columns_to_coalesce, target_column, drop=False) -> pd.DataFrame:
         df[target_column] = df[columns_to_coalesce].bfill(axis=1).iloc[:, 0]
         if drop:
             if target_column in columns_to_coalesce:
                 columns_to_coalesce.remove(target_column)
             df = df.drop(columns=columns_to_coalesce)
         return df
-
-    def apply_snake_case(self):
-        Cleaner.column_names_to_snake_case(self._df)
-
-    def apply_pascal_case(self):
-        Cleaner.column_names_to_pascal_case(self._df)
-
-    def on_numbers(self):
-        self._df = Cleaner.clean_numbers(self._df)
-
-    def on_dates(self):
-        self._df = Cleaner.clean_dates(self._df)
-
-    def on_booleans(self):
-        self._df = Cleaner.clean_bools(self._df)
-
-    def on_all_datatypes(self):
-        self._df = Cleaner.clean_all_types(self._df)
-
-    def on_df(self):
-        self._df = Cleaner.clean_df(self._df)
-

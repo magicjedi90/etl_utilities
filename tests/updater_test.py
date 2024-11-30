@@ -1,5 +1,5 @@
 import unittest
-from src.etl.query.updater import Updater
+from src.etl.query.mssql_updater import MsSqlUpdater
 
 
 class TestInserter(unittest.TestCase):
@@ -28,7 +28,7 @@ class TestInserter(unittest.TestCase):
             'when not matched by source then delete;'
         )
 
-        actual_query = Updater.merge_mssql(
+        actual_query = MsSqlUpdater.merge_sql(
             self.source_schema, self.source_table, self.columns, self.id_column, self.target_schema, self.target_table, self.columns, self.id_column
         )
 
@@ -42,7 +42,7 @@ class TestInserter(unittest.TestCase):
             'insert into target_schema.target_table ([id], [name], [value]) select [id], [name], [value] from source_schema.source_table;'
         )
 
-        actual_query = Updater.upsert_mssql(
+        actual_query = MsSqlUpdater.upsert_sql(
             self.source_schema, self.source_table, self.columns, self.id_column, self.target_schema, self.target_table, self.columns, self.id_column
         )
 
@@ -55,7 +55,7 @@ class TestInserter(unittest.TestCase):
             ' except select [id],[name],[value] from target_schema.target_table'
         )
 
-        actual_query = Updater.append_mssql(
+        actual_query = MsSqlUpdater.append_sql(
             self.source_schema, self.source_table, self.columns, self.target_schema, self.target_table, self.columns
         )
 

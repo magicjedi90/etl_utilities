@@ -1,4 +1,4 @@
-class Updater:
+class MsSqlUpdater:
 
     def __init__(self, source_schema: str, source_table: str, source_columns: list[str], source_id_column: str,
                  target_schema: str, target_table: str, target_columns: list[str], target_id_column: str):
@@ -12,9 +12,9 @@ class Updater:
         self._target_id_column = target_id_column
 
     @staticmethod
-    def merge_mssql(source_schema: str, source_table: str, source_columns: list[str], source_id_column: str,
-                    target_schema: str, target_table: str, target_columns: list[str], target_id_column: str,
-                    delete_unmatched: bool = True):
+    def merge_sql(source_schema: str, source_table: str, source_columns: list[str], source_id_column: str,
+                  target_schema: str, target_table: str, target_columns: list[str], target_id_column: str,
+                  delete_unmatched: bool = True) -> str:
         if len(source_columns) != len(target_columns):
             raise ValueError("source_columns and target_columns must have the same length")
         stage = f'{source_schema}.{source_table}'
@@ -50,8 +50,8 @@ class Updater:
         return f'{query};'
 
     @staticmethod
-    def upsert_mssql(source_schema: str, source_table: str, source_columns: list[str], source_id_column: str,
-                     target_schema: str, target_table: str, target_columns: list[str], target_id_column: str):
+    def upsert_sql(source_schema: str, source_table: str, source_columns: list[str], source_id_column: str,
+                   target_schema: str, target_table: str, target_columns: list[str], target_id_column: str) -> str:
         stage = f'{source_schema}.{source_table}'
         location = f'{target_schema}.{target_table}'
         clean_target_columns = [f'[{column}]' for column in target_columns]
@@ -76,8 +76,8 @@ class Updater:
         return query
 
     @staticmethod
-    def append_mssql(source_schema: str, source_table: str, source_columns: list[str], target_schema: str,
-                     target_table: str, target_columns: list[str]):
+    def append_sql(source_schema: str, source_table: str, source_columns: list[str], target_schema: str,
+                   target_table: str, target_columns: list[str]) -> str:
         stage = f'{source_schema}.{source_table}'
         location = f'{target_schema}.{target_table}'
         clean_target_columns = [f'[{column}]' for column in target_columns]
@@ -92,20 +92,20 @@ class Updater:
         )
         return query
 
-    def merge(self, delete_unmatched: bool = True):
-        return self.merge_mssql(
+    def merge(self, delete_unmatched: bool = True) -> str:
+        return self.merge_sql(
             self._source_schema, self._source_table, self._source_columns, self._source_id_column,
             self._target_schema, self._target_table, self._target_columns, self._target_id_column, delete_unmatched
         )
 
-    def upsert(self):
-        return self.upsert_mssql(
+    def upsert(self) -> str:
+        return self.upsert_sql(
             self._source_schema, self._source_table, self._source_columns, self._source_id_column,
             self._target_schema, self._target_table, self._target_columns, self._target_id_column
         )
 
-    def append(self):
-        return self.append_mssql(
+    def append(self) -> str:
+        return self.append_sql(
             self._source_schema, self._source_table, self._source_columns,
             self._target_schema, self._target_table, self._target_columns
         )

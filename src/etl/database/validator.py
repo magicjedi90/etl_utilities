@@ -1,4 +1,7 @@
 import math
+
+from sqlalchemy import PoolProxiedConnection
+
 from ..dataframe.analyzer import Analyzer
 from .. import constants
 import pandas as pd
@@ -20,20 +23,20 @@ class Validator:
         ExtraColumnsException: If the DataFrame has extra columns not present in the database table.
         ColumnDataException: If there are type mismatches or truncation issues with the columns in the DataFrame.
     """
-    def __init__(self, connection, df: pd.DataFrame, schema: str, table: str):
+    def __init__(self, connection: PoolProxiedConnection, df: pd.DataFrame, schema: str, table: str) -> None:
         self._connection = connection
         self._df = df
         self._schema = schema
         self._table = table
 
     @staticmethod
-    def validate_upload(connection, df: pd.DataFrame, schema: str, table: str):
+    def validate_upload(connection: PoolProxiedConnection, df: pd.DataFrame, schema: str, table: str)  -> None:
         df_columns, column_info_df = Validator._fetch_column_info(connection, df, schema, table)
         Validator._check_extra_columns(df, df_columns, column_info_df, schema, table)
         Validator._validate_column_types(df, df_columns, column_info_df)
 
     @staticmethod
-    def _fetch_column_info(connection, df, schema, table):
+    def _fetch_column_info(connection: PoolProxiedConnection, df: pd.DataFrame, schema: str, table: str) -> tuple[list[str], pd.DataFrame]:
         get_column_info_query = (
             f'select COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION '
             f'from INFORMATION_SCHEMA.columns '

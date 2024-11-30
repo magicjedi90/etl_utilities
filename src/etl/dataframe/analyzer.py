@@ -1,4 +1,6 @@
 import itertools
+from typing import List, Hashable
+
 import pandas as pd
 import math
 from .parser import Parser
@@ -6,7 +8,7 @@ from .parser import Parser
 
 class Analyzer:
     @staticmethod
-    def find_unique_columns(df: pd.DataFrame):
+    def find_unique_columns(df: pd.DataFrame) -> list[Hashable]:
         total_records = df.shape[0]
         unique_columns = []
         for column, series in df.items():
@@ -17,7 +19,7 @@ class Analyzer:
         return unique_columns
 
     @staticmethod
-    def find_unique_column_pairs(df: pd.DataFrame):
+    def find_unique_column_pairs(df: pd.DataFrame) -> list[tuple[Hashable, Hashable]]:
         total_records = df.shape[0]
         column_list = df.columns
         unique_columns = Analyzer.find_unique_columns(df)
@@ -38,7 +40,7 @@ class Analyzer:
         return unique_column_pairs
 
     @staticmethod
-    def find_empty_columns(df: pd.DataFrame):
+    def find_empty_columns(df: pd.DataFrame) -> list[str]:
         empty_columns = []
         for column, series in df.items():
             if series.dropna().empty:
@@ -46,7 +48,7 @@ class Analyzer:
         return empty_columns
 
     @staticmethod
-    def generate_column_metadata(df: pd.DataFrame, primary_key: str, unique_columns: list[str], decimal_places: int):
+    def generate_column_metadata(df: pd.DataFrame, primary_key: str, unique_columns: list[str], decimal_places: int) -> list[dict]:
         column_metadata_list = []
         for column, series in df.items():
             column_metadata = {
@@ -102,7 +104,7 @@ class Analyzer:
         return column_metadata_list
 
     @staticmethod
-    def find_categorical_columns(df: pd.DataFrame, unique_threshold: float = 1):
+    def find_categorical_columns(df: pd.DataFrame, unique_threshold: float = 1) -> list[Hashable]:
         if unique_threshold < 0 or unique_threshold > 1:
             raise ValueError('Unique threshold must be between 0 and 1')
         categorical_columns = []
