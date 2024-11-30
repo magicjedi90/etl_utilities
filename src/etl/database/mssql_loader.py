@@ -2,13 +2,34 @@ import math
 
 from sqlalchemy.engine.interfaces import DBAPICursor
 
-from .loader import Loader
-from .. import constants
+from src.etl.database.loader import Loader
+from src.etl import constants
 import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
-from ..logger import Logger
+from src.etl.logger import Logger
 logger = Logger().get_logger()
+
+
+def prepare_data(df: pd.DataFrame, schema: str, table: str) -> tuple[pd.DataFrame, str, str, list[str]]:
+    column_list = df.columns.tolist()
+    column_list = [f'[{column}]' for column in column_list]
+    column_string = ", ".join(column_list)
+    location = f"{schema}.[{table}]"
+    placeholders = []
+    for column in df.columns:
+        series = df[column]
+        series_type = series.dtype
+        str_column = series.apply(str)
+        max_size = str_column.str.len().max()
+        if max_size > 256:
+            placeholders.append('cast ( ? as nvarchar(max))')
+        else:
+            placeholders.append('?')
+        # switches from numpy class to python class for bool float and int
+        if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
+            df[column] = series.tolist()
+    return df, column_string, location, placeholders
 
 
 class MsSqlLoader(Loader):
@@ -16,34 +37,13 @@ class MsSqlLoader(Loader):
         super().__init__(cursor, df, schema, table)
 
     @staticmethod
-    def __prepare_data(df: pd.DataFrame, schema: str, table: str) -> tuple[pd.DataFrame, str, str, list[str]]:
-        column_list = df.columns.tolist()
-        column_list = [f'[{column}]' for column in column_list]
-        column_string = ", ".join(column_list)
-        location = f"{schema}.[{table}]"
-        placeholders = []
-        for column in df.columns:
-            series = df[column]
-            series_type = series.dtype
-            str_column = series.apply(str)
-            max_size = str_column.str.len().max()
-            if max_size > 256:
-                placeholders.append('cast ( ? as nvarchar(max))')
-            else:
-                placeholders.append('?')
-            # switches from numpy class to python class for bool float and int
-            if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
-                df[column] = series.tolist()
-        return df, column_string, location, placeholders
-
-    @staticmethod
     def insert_to_table(cursor: DBAPICursor, df: pd.DataFrame, schema: str, table: str) -> None:
-        df, column_string, location, placeholders = MsSqlLoader.__prepare_data(df, schema, table)
+        df, column_string, location, placeholders = prepare_data(df, schema, table)
         Loader._insert_to_table(column_string, cursor, df, location, placeholders)
 
     @staticmethod
     def insert_to_table_fast(cursor: DBAPICursor, df: pd.DataFrame, schema: str, table: str, batch_size: int = 1000) -> None:
-        df, column_string, location, placeholders = MsSqlLoader.__prepare_data(df, schema, table)
+        df, column_string, location, placeholders = prepare_data(df, schema, table)
         df = df.replace({np.nan: None})
         placeholder_list = ", ".join(placeholders)
         query = f'INSERT INTO {location} ({column_string}) VALUES ({placeholder_list});'

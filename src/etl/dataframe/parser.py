@@ -6,7 +6,7 @@ from dateutil import parser
 
 class Parser:
     @staticmethod
-    def parse_boolean(value) -> bool | None:
+    def parse_boolean(value):
         """
         Function to parse a boolean value from a given input.
         :param value: The value to be parsed as a boolean.
@@ -26,7 +26,7 @@ class Parser:
             raise ValueError(f"Invalid truth value: {value}")
 
     @staticmethod
-    def parse_float(value) -> float | None:
+    def parse_float(value):
         """
         Function to parse a given value as a float.
         :param value: The value to parse as a float.
@@ -38,7 +38,7 @@ class Parser:
         return float(cleaned_value)
 
     @staticmethod
-    def parse_date(value) -> datetime | None:
+    def parse_date(value):
         """
         This function is used to parse a date value.
         :param value: The value to be parsed as a date.
@@ -49,7 +49,7 @@ class Parser:
         return parser.parse(str(value).strip())
 
     @staticmethod
-    def parse_integer(value) -> int | None:
+    def parse_integer(value):
         """
         Parses an input value to an integer.
         :param value: The value to be parsed.

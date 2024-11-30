@@ -2,12 +2,29 @@ import math
 
 from sqlalchemy.engine.interfaces import DBAPICursor
 
-from .. import constants
 import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
-from ..logger import Logger
+from src.etl.logger import Logger
 logger = Logger().get_logger()
+
+
+def insert_to_db(column_string: str, cursor: DBAPICursor, data_list: list, location: str,
+                 row_placeholders: list[str]) -> None:
+    # inserts each row using a union select
+    row_list = " union ".join(['select {}'.format(row) for row in row_placeholders])
+    execute_query = (
+        f"insert into {location} ({column_string}) {row_list}"
+    )
+    try:
+        logger.debug(f'Execute Query:\n{execute_query}')
+        logger.debug(
+            f'Data List:\n{data_list}')
+        cursor.execute(execute_query, data_list)
+    except Exception as e:
+        logger.error(execute_query)
+        logger.error(data_list)
+        raise e
 
 
 class Loader:
@@ -16,23 +33,6 @@ class Loader:
         self._df = df
         self._schema = schema
         self._table = table
-
-    @staticmethod
-    def __insert_to_db(column_string: str, cursor: DBAPICursor, data_list: list, location: str, row_placeholders: list[str]) -> None:
-        # inserts each row using a union select
-        row_list = " union ".join(['select {}'.format(row) for row in row_placeholders])
-        execute_query = (
-            f"insert into {location} ({column_string}) {row_list}"
-        )
-        try:
-            logger.debug(f'Execute Query:\n{execute_query}')
-            logger.debug(
-                f'Data List:\n{data_list}')
-            cursor.execute(execute_query, data_list)
-        except Exception as e:
-            logger.error(execute_query)
-            logger.error(data_list)
-            raise e
 
     @staticmethod
     def _insert_to_table(column_string: str, cursor: DBAPICursor, df: pd.DataFrame, location: str, placeholders: list[str]):
@@ -55,12 +55,12 @@ class Loader:
                 data_list.extend(row)
                 next_size = data_count + row_size
                 if next_size >= 2000:
-                    Loader.__insert_to_db(column_string, cursor, data_list, location, row_placeholder)
+                    insert_to_db(column_string, cursor, data_list, location, row_placeholder)
                     progress.update(upload_task, advance=row_count)
                     row_placeholder = []
                     data_list = []
                     data_count = 0
                     row_count = 0
             if row_count > 0:
-                Loader.__insert_to_db(column_string, cursor, data_list, location, row_placeholder)
+                insert_to_db(column_string, cursor, data_list, location, row_placeholder)
                 progress.update(upload_task, advance=row_count)
