@@ -1,13 +1,11 @@
-import math
-
 from sqlalchemy.engine.interfaces import DBAPICursor
 
-from src.etl.database.loader import Loader
-from src.etl import constants
+from .loader import Loader
+from .. import constants
 import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
-from src.etl.logger import Logger
+from ..logger import Logger
 logger = Logger().get_logger()
 
 
@@ -54,22 +52,15 @@ class MsSqlLoader(Loader):
 
         # Perform the bulk insert
         cursor.fast_executemany = True
-
+        progress_location = location.replace('[', '').replace(']', '').replace('`', '')
         with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(),
                       MofNCompleteColumn()) as progress:
-            total_batches = math.ceil(len(data) / batch_size)
-            table_task = progress.add_task(f'loading {location}', total=len(data))
-            batch_task = progress.add_task(f'batch', total=total_batches)
-
             try:
-                batch_count = 0
+                table_task = progress.add_task(f'fast loading {progress_location}', total=len(data))
                 for i in range(0, len(data), batch_size):
-                    row_count = i + batch_size
-                    batch_count += 1
-                    cursor.executemany(query, data[i:row_count])
-                    progress.update(table_task, advance=row_count)
-                    progress.update(batch_task, advance=batch_count)
-                logger.info(f'Inserted {len(data)} rows into {location}.')
+                    actual_batch_size = min(batch_size, len(data) - i)
+                    cursor.executemany(query, data[i:i + actual_batch_size])
+                    progress.update(table_task, advance=actual_batch_size)
             except Exception as e:
                 cursor.rollback()
                 logger.error(f'Error inserting data into {location}: {str(e)}')

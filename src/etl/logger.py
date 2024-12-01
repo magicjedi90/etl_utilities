@@ -1,4 +1,4 @@
-import logging
+from rich.logging import logging
 import sys
 
 

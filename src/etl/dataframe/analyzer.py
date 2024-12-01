@@ -1,6 +1,5 @@
 import itertools
-from typing import List, Hashable
-
+from typing import Hashable
 import pandas as pd
 import math
 from .parser import Parser

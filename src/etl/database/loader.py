@@ -1,11 +1,9 @@
-import math
-
 from sqlalchemy.engine.interfaces import DBAPICursor
-
 import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
-from src.etl.logger import Logger
+from ..logger import Logger
+
 logger = Logger().get_logger()
 
 
@@ -35,7 +33,8 @@ class Loader:
         self._table = table
 
     @staticmethod
-    def _insert_to_table(column_string: str, cursor: DBAPICursor, df: pd.DataFrame, location: str, placeholders: list[str]):
+    def _insert_to_table(column_string: str, cursor: DBAPICursor, df: pd.DataFrame, location: str,
+                         placeholders: list[str]):
         placeholder_list = ", ".join(placeholders)
         df = df.replace({np.nan: None})
         with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(),
@@ -45,7 +44,9 @@ class Loader:
             data_list = []
             data_count = 0
             row_count = 0
-            upload_task = progress.add_task(f'loading {location}', total=total)
+            progress_location = location.replace('[', '').replace(']', '').replace('`', '')
+
+            upload_task = progress.add_task(f'loading {progress_location}', total=total)
             for row in df.itertuples(index=False, name=None):
                 row_size = len(row)
                 row_count += 1
