@@ -15,9 +15,6 @@ def insert_to_db(column_string: str, cursor: DBAPICursor, data_list: list, locat
         f"insert into {location} ({column_string}) {row_list}"
     )
     try:
-        logger.debug(f'Execute Query:\n{execute_query}')
-        logger.debug(
-            f'Data List:\n{data_list}')
         cursor.execute(execute_query, data_list)
     except Exception as e:
         logger.error(execute_query)

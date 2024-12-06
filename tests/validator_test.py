@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from unittest.mock import Mock, patch
 from src.etl.database.validator import Validator, ExtraColumnsException, ColumnDataException
-
+from src.etl.dataframe.analyzer import Analyzer
 
 class TestValidator(unittest.TestCase):
 
@@ -46,10 +46,10 @@ class TestValidator(unittest.TestCase):
             'NUMERIC_PRECISION': [1, None]
         })
 
-        df_columns = df.columns.tolist()
+        df_metadata = Analyzer.generate_column_metadata(df, None, None, 2)
 
         with self.assertRaises(ColumnDataException):
-            Validator._validate_column_types(df, df_columns, column_info_df)
+            Validator._validate_column_types(df_metadata, column_info_df)
 
     def test_extra_columns_exception(self):
         # Create a DataFrame with extra columns
@@ -61,10 +61,8 @@ class TestValidator(unittest.TestCase):
             'NUMERIC_PRECISION': [1, None]
         })
 
-        df_columns = df.columns.tolist()
-
         with self.assertRaises(ExtraColumnsException):
-            Validator._check_extra_columns(df, df_columns, column_info_df, self.schema, self.table)
+            Validator._check_extra_columns(df, column_info_df, self.schema, self.table)
 
 
     def test_mismatched_columns(self):
@@ -77,10 +75,10 @@ class TestValidator(unittest.TestCase):
             'NUMERIC_PRECISION': [1, None]
         })
 
-        df_columns = df.columns.tolist()
+        df_metadata = Analyzer.generate_column_metadata(df, None, None, 2)
 
         with self.assertRaises(ColumnDataException):
-            Validator._validate_column_types(df, df_columns, column_info_df)
+            Validator._validate_column_types(df_metadata, column_info_df)
 
 
 if __name__ == '__main__':

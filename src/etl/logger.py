@@ -58,6 +58,9 @@ class Logger:
         """Return the configured logger."""
         return self.logger
 
+    def set_level(self, level: logging.INFO | logging.DEBUG | logging.WARNING | logging.ERROR | logging.CRITICAL):
+        self.logger.setLevel(level)
+
 
 # Example usage
 if __name__ == '__main__':
