@@ -105,9 +105,11 @@ class Validator:
     def _check_string_or_date_truncation(column, db_column_info):
         df_max_string_length = column['max_str_size']
         db_column_string_length = db_column_info.get('CHARACTER_MAXIMUM_LENGTH')
+        if df_max_string_length is None:
+            return
         if db_column_string_length == -1:
             return
-        if db_column_string_length and df_max_string_length > db_column_string_length:
+        if df_max_string_length > db_column_string_length:
             return f'{column} needs a minimum of {df_max_string_length} size to be inserted'
 
     def validate(self):

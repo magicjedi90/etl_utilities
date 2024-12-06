@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
 
-DB_INT_TYPES = ['bigint', 'int', 'smallint', 'tinyint', 'mediumint', 'integer', 'bit']
+DB_INT_TYPES = ['bigint', 'int', 'smallint', 'tinyint', 'mediumint', 'integer']
 DB_FLOAT_TYPES = ['decimal', 'numeric', 'float', 'double']
 DB_STR_TYPES = ['varchar', 'nvarchar', 'char', 'nchar', 'string']
-DB_BOOL_TYPES = ['bit', 'tinyint', 'bool', 'boolean']
+DB_BOOL_TYPES = ['bit', 'bool', 'boolean']
 DB_DATE_TYPES = ['date', 'datetime', 'datetime2', 'time', 'timestamp', 'smalldatetime', 'year']
 DB_TYPES = [DB_INT_TYPES, DB_FLOAT_TYPES, DB_STR_TYPES, DB_BOOL_TYPES, DB_DATE_TYPES]
 NUMPY_INT_TYPES = [np.int_, np.int64, np.int32, np.int8, 'Int64']
