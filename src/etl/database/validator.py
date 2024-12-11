@@ -98,6 +98,8 @@ class Validator:
     def _check_numeric_truncation(column, db_column_info):
         df_numeric_precision = column['float_precision']
         db_column_numeric_precision = db_column_info['NUMERIC_PRECISION']
+        if df_numeric_precision is None:
+            return
         if df_numeric_precision > db_column_numeric_precision:
             return f'{column} needs a minimum of {df_numeric_precision} precision to be inserted'
 

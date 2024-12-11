@@ -81,6 +81,7 @@ class Analyzer:
                 column_metadata['data_type'] = 'integer'
                 column_metadata['biggest_num'] = biggest_num
                 column_metadata['smallest_num'] = smallest_num
+                column_metadata['float_precision'] -= decimal_places
             except (ValueError, TypeError):
                 pass
             try:
