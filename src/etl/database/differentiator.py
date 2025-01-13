@@ -108,55 +108,75 @@ class Differentiator:
         columns = target_column_info_df['COLUMN_NAME'].tolist()
         return columns
 
-    @staticmethod
-    def find_table_similarities_in_schema(connection: PoolProxiedConnection, schema: str,
-                                          similarity_threshold: float = .8):
-        get_table_info_query = (
-            f'select TABLE_NAME from INFORMATION_SCHEMA.TABLES '
-            f'where TABLE_SCHEMA = \'{schema}\' and TABLE_TYPE = \'BASE TABLE\';'
+    def find_table_similarities_in_schema(self, schema: str, similarity_threshold: float = 0.8,
+                                          ):
+        """
+        Find column similarities, differences, and unique columns across all tables in a schema.
+        """
+
+        # Fetch table names in the schema
+        query = (
+            f"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+            f"WHERE TABLE_SCHEMA = '{schema}' AND TABLE_TYPE = 'BASE TABLE';"
         )
-        table_info_df = pd.read_sql(get_table_info_query, connection)
-        table_list = table_info_df['TABLE_NAME'].tolist()
-        same_name_columns_list = []
-        similar_columns_list = []
-        unique_columns_list = []
-        for table_set in itertools.combinations(table_list, 2):
-            same_name_columns, similar_columns, unique_source_columns, unique_target_columns = Differentiator.find_table_similarities(
-                connection, schema, schema, table_set[0], table_set[1], similarity_threshold)
-            for column in same_name_columns:
-                source_column = f'{table_set[0]}.{column}'
-                target_column = f'{table_set[1]}.{column}'
-                if source_column not in same_name_columns_list:
-                    same_name_columns_list.append(source_column)
-                if target_column not in same_name_columns_list:
-                    same_name_columns_list.append(target_column)
-            for column in similar_columns:
-                source_column = f'{table_set[0]}.{column["source_column"]}'
-                target_column = f'{table_set[1]}.{column["target_column"]}'
-                if source_column not in similar_columns_list:
-                    similar_columns_list.append(source_column)
-                    if source_column in unique_columns_list:
-                        unique_columns_list.remove(source_column)
-                if target_column not in similar_columns_list:
-                    similar_columns_list.append(target_column)
-                    if target_column in unique_columns_list:
-                        unique_columns_list.remove(target_column)
-            for column in unique_source_columns:
-                source_column = f'{table_set[0]}.{column}'
-                if source_column not in unique_columns_list and source_column not in similar_columns_list:
-                    unique_columns_list.append(source_column)
-        same_name_columns_list.sort()
-        similar_columns_list.sort()
-        unique_columns_list.sort()
+        table_list = pd.read_sql(query, self.connection)["TABLE_NAME"].tolist()
+
+        # Prepare result containers
+        same_name_columns_list = set()
+        similar_columns_list = set()
+        unique_columns_list = set()
+
+        # Iterate through all combinations of table pairs
+        for source_table, target_table in itertools.combinations(table_list, 2):
+            differentiator = Differentiator(
+                connection=self.connection,
+                source_schema=schema,
+                target_schema=schema,
+                source_table=source_table,
+                target_table=target_table,
+                similarity_threshold=similarity_threshold,
+            )
+
+            # Perform table comparison
+            same_name_columns, similar_columns, unique_source_columns, unique_target_columns = differentiator.find_table_similarities()
+
+            # Process results
+            same_name_columns_list.update(
+                f"{source_table}.{col}" for col in same_name_columns
+            )
+            same_name_columns_list.update(
+                f"{target_table}.{col}" for col in same_name_columns
+            )
+
+            similar_columns_list.update(
+                f"{source_table}.{col['source_column']}" for col in similar_columns
+            )
+            similar_columns_list.update(
+                f"{target_table}.{col['target_column']}" for col in similar_columns
+            )
+
+            unique_columns_list.update(
+                f"{source_table}.{col}" for col in unique_source_columns
+            )
+            unique_columns_list.update(
+                f"{target_table}.{col}" for col in unique_target_columns
+            )
+
+        # Sort results for consistency
+        same_name_columns_list = sorted(same_name_columns_list)
+        similar_columns_list = sorted(similar_columns_list)
+        unique_columns_list = sorted(
+            unique_columns_list - similar_columns_list
+        )  # Exclude columns already marked as similar
+
+        # Log results
         message = (
-            f'\n{"=" * 50}\n{schema} schema table differences\n'
-            f'{"*" * 8} Columns with the same name:\n'
-            f'{", ".join(same_name_columns_list)}\n'
-            f'{"*" * 8} Columns with similar data:\n'
-            f'{", ".join(similar_columns_list)}\n'
-            f'{"*" * 8} Columns with unique data:\n'
-            f'{", ".join(unique_columns_list)}\n'
-            f'\n{"=" * 50}\n'
+            f"\n{'=' * 50}\nSchema: {schema} - Table Comparisons\n"
+            f"{'*' * 8} Columns with the same name:\n{', '.join(same_name_columns_list)}\n"
+            f"{'*' * 8} Columns with similar data:\n{', '.join(similar_columns_list)}\n"
+            f"{'*' * 8} Columns with unique data:\n{', '.join(unique_columns_list)}\n"
+            f"{'=' * 50}\n"
         )
         logger.info(message)
+
         return same_name_columns_list, similar_columns_list, unique_columns_list
