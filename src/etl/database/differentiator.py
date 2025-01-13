@@ -9,9 +9,8 @@ logger = Logger().get_logger()
 
 class Differentiator:
     @staticmethod
-    def find_table_similarities(connection: PoolProxiedConnection, source_schema: str, target_schema: str,
-                                source_table: str,
-                                target_table: str, similarity_threshold: float = .8):
+    def find_table_similarities(connection: PoolProxiedConnection, source_schema: str, source_table: str,
+                                target_schema: str, target_table: str, similarity_threshold: float = .8):
         target_columns = Differentiator.get_column_name_list(connection, target_schema, target_table)
         source_columns = Differentiator.get_column_name_list(connection, source_schema, source_table)
         target_column_list = Differentiator.get_column_dict_list(connection, target_columns, target_schema,
