@@ -8,84 +8,105 @@ logger = Logger().get_logger()
 
 
 class Differentiator:
-    @staticmethod
-    def find_table_similarities(connection: PoolProxiedConnection, source_schema: str, target_schema: str,
-                                source_table: str,
-                                target_table: str, similarity_threshold: float = .8):
-        target_columns = Differentiator.get_column_name_list(connection, target_schema, target_table)
-        source_columns = Differentiator.get_column_name_list(connection, source_schema, source_table)
-        target_column_list = Differentiator.get_column_dict_list(connection, target_columns, target_schema,
-                                                                 target_table)
-        source_column_list = Differentiator.get_column_dict_list(connection, source_columns, source_schema,
-                                                                 source_table)
-        similar_columns = []
-        unique_source_columns = []
-        non_unique_target_columns = []
-        same_name_columns = []
-        for source_column in source_column_list:
+    def __init__(self, connection: PoolProxiedConnection, source_schema: str, target_schema: str, source_table: str,
+                 target_table: str, similarity_threshold: float = .8):
+        self.connection = connection
+        self.source_schema = source_schema
+        self.target_schema = target_schema
+        self.source_table = source_table
+        self.target_table = target_table
+        self.similarity_threshold = similarity_threshold
+        self.target_columns = []
+        self.source_columns = []
+        self.target_column_list = []
+        self.source_column_list = []
+        self.similar_columns = []
+        self.unique_source_columns = []
+        self.non_unique_target_columns = []
+        self.same_name_columns = []
+        self.unique_target_columns = []
+
+    def find_table_similarities(self):
+        self.get_column_data()
+        self.get_column_dicts()
+        self.compare_columns()
+        self.log_results()
+        return self.same_name_columns, self.similar_columns, self.unique_source_columns, self.unique_target_columns
+
+    def get_column_dicts(self):
+        self.target_column_list = self.get_column_dict_list(self.target_columns, self.target_schema,
+                                                            self.target_table)
+        self.source_column_list = self.get_column_dict_list(self.source_columns, self.source_schema,
+                                                            self.source_table)
+
+    def get_column_data(self):
+        self.target_columns = self.get_column_name_list(self.target_schema, self.target_table)
+        self.source_columns = self.get_column_name_list(self.source_schema, self.source_table)
+
+    def log_results(self):
+        self.same_name_columns.sort()
+        self.unique_source_columns.sort()
+        self.unique_target_columns.sort()
+        message = (
+            f'\n{"=" * 50}\ntable comparison between {self.source_table} and {self.target_table}\n'
+            f'{"*" * 8} Columns with the same name:\n'
+            f'{", ".join(self.same_name_columns)}\n'
+            f'{"*" * 8} Columns with similar data:\n'
+            f'{"\n".join([f'{column}' for column in self.similar_columns])}\n'
+            f'{"*" * 8} Source Columns with unique data:\n'
+            f'{", ".join(self.unique_source_columns)}\n'
+            f'{"*" * 8} Target Columns with unique data:\n'
+            f'{", ".join(self.unique_target_columns)}\n'
+            f'\n{"=" * 50}\n'
+        )
+        logger.info(message)
+
+    def compare_columns(self):
+        for source_column in self.source_column_list:
             is_unique_source_column = True
-            for target_column in target_column_list:
+            for target_column in self.target_column_list:
                 if source_column['name'] == target_column['name']:
-                    same_name_columns.append(source_column['name'])
+                    self.same_name_columns.append(source_column['name'])
                 try:
                     similarity_source = source_column['data'].isin(target_column['data'])
                     similarity_target = target_column['data'].isin(source_column['data'])
                     similarity = max(similarity_source, similarity_target)
-                    if similarity >= similarity_threshold:
+                    if similarity >= self.similarity_threshold:
                         is_unique_source_column = False
                         column_dict = {
                             "source_column": source_column['name'],
                             "target_column": target_column['name'],
                             "similarity": similarity
                         }
-                        similar_columns.append(column_dict)
+                        self.similar_columns.append(column_dict)
                         is_unique_source_column = False
-                        non_unique_target_columns.append(target_column['name'])
+                        self.non_unique_target_columns.append(target_column['name'])
                 except (ValueError, TypeError) as e:
                     logger.debug(f'{source_column["name"]} and {target_column["name"]} are not comparable: {e}')
             if is_unique_source_column:
-                unique_source_columns.append(source_column['name'])
-        unique_target_columns = []
-        if non_unique_target_columns.__len__() < target_columns.__len__():
-            unique_target_columns = [column for column in target_columns if column not in non_unique_target_columns]
-        same_name_columns.sort()
-        unique_source_columns.sort()
-        unique_target_columns.sort()
-        message = (
-            f'\n{"=" * 50}\ntable comparison between {source_table} and {target_table}\n'
-            f'{"*" * 8} Columns with the same name:\n'
-            f'{", ".join(same_name_columns)}\n'
-            f'{"*" * 8} Columns with similar data:\n'
-            f'{"\n".join([f'{column}' for column in similar_columns])}\n'
-            f'{"*" * 8} Source Columns with unique data:\n'
-            f'{", ".join(unique_source_columns)}\n'
-            f'{"*" * 8} Target Columns with unique data:\n'
-            f'{", ".join(unique_target_columns)}\n'
-            f'\n{"=" * 50}\n'
-        )
-        logger.info(message)
-        return same_name_columns, similar_columns, unique_source_columns, unique_target_columns
+                self.unique_source_columns.append(source_column['name'])
+        if self.non_unique_target_columns.__len__() < self.target_columns.__len__():
+            self.unique_target_columns = [column for column in self.target_columns if
+                                          column not in self.non_unique_target_columns]
 
-    @staticmethod
-    def get_column_dict_list(connection, column_names, schema, table):
-        source_column_list = []
+    def get_column_dict_list(self, column_names, schema, table):
+        column_list = []
         for column in column_names:
             query = f'select distinct ([{column}]) from {schema}.{table}'
-            column_series = pd.read_sql(query, connection).squeeze()
+            column_series = pd.read_sql(query, self.connection)[column]  # THIS IS FOR YOU JESSE
             column_series = column_series.dropna()
             column_dict = {"name": column, "data": column_series}
-            source_column_list.append(column_dict)
-        return source_column_list
+            column_list.append(column_dict)
+        return column_list
 
-    @staticmethod
-    def get_column_name_list(connection, schema, table):
+    def get_column_name_list(self, schema, table):
         get_target_column_info_query = (
             f'select COLUMN_NAME '
             f'from INFORMATION_SCHEMA.columns '
             f'where table_schema = \'{schema}\' and table_name = \'{table}\'')
-        target_column_info_df = pd.read_sql(get_target_column_info_query, connection)
-        target_columns = target_column_info_df['COLUMN_NAME'].tolist()
-        return target_columns
+        target_column_info_df = pd.read_sql(get_target_column_info_query, self.connection)
+        columns = target_column_info_df['COLUMN_NAME'].tolist()
+        return columns
 
     @staticmethod
     def find_table_similarities_in_schema(connection: PoolProxiedConnection, schema: str,
