@@ -1,9 +1,10 @@
 import itertools
-
 from sqlalchemy import PoolProxiedConnection
 import pandas as pd
 from ..logger import Logger
+from warnings import filterwarnings
 
+filterwarnings("ignore", category=UserWarning, message='.*pandas only supports SQLAlchemy connectable.*')
 logger = Logger().get_logger()
 
 
@@ -32,8 +33,8 @@ class Differentiator:
                     }
                     same_name_columns.append(column_dict)
                 try:
-                    similarity_source = source_column['data'].isin(target_column['data'])
-                    similarity_target = target_column['data'].isin(source_column['data'])
+                    similarity_source = source_column['data'].isin(target_column['data']).mean()
+                    similarity_target = target_column['data'].isin(source_column['data']).mean()
                     similarity = max(similarity_source, similarity_target)
                     if similarity >= similarity_threshold:
                         is_unique_source_column = False
@@ -60,7 +61,7 @@ class Differentiator:
             unique_target_columns = [{"table": target_table, "column": column} for column in target_columns if
                                      column not in non_unique_target_columns]
 
-        similarity_df = pd.DataFrame(source_column_list)
+        similarity_df = pd.DataFrame(similar_columns)
         same_name_df = pd.DataFrame(same_name_columns)
         unique_source_df = pd.DataFrame(unique_source_columns)
         unique_target_df = pd.DataFrame(unique_target_columns)
@@ -102,34 +103,34 @@ class Differentiator:
         unique_list = []
         for table_set in itertools.combinations(table_list, 2):
             similarity_df, same_name_df, unique_df = Differentiator.find_table_similarities(
-                connection, schema, schema, table_set[0], table_set[1], similarity_threshold)
+                connection, schema, table_set[0], schema, table_set[1], similarity_threshold)
             same_name_list.append(same_name_df)
             similarity_list.append(similarity_df)
             unique_list.append(unique_df)
         schema_similarities_df = pd.concat(similarity_list)
         schema_same_name_df = pd.concat(same_name_list)
         schema_unique_df = pd.concat(unique_list)
+        if not schema_similarities_df.empty:
+            # Combine table and column in both DataFrames for comparison
+            schema_unique_df['combined'] = schema_unique_df['table'] + '.' + schema_unique_df['column']
+            schema_similarities_df['combined_source'] = schema_similarities_df['source_table'] + '.' + \
+                                                        schema_similarities_df[
+                                                            'source_column']
+            schema_similarities_df['combined_target'] = schema_similarities_df['target_table'] + '.' + \
+                                                        schema_similarities_df[
+                                                            'target_column']
 
-        # Combine table and column in both DataFrames for comparison
-        schema_unique_df['combined'] = schema_unique_df['table'] + '.' + schema_unique_df['column']
-        schema_similarities_df['combined_source'] = schema_similarities_df['source_table'] + '.' + \
-                                                    schema_similarities_df[
-                                                        'source_column']
-        schema_similarities_df['combined_target'] = schema_similarities_df['target_table'] + '.' + \
-                                                    schema_similarities_df[
-                                                        'target_column']
+            # Combine all "similar" columns into one series for exclusion
+            similar_columns_combined = pd.concat([
+                schema_similarities_df['combined_source'],
+                schema_similarities_df['combined_target']
+            ])
 
-        # Combine all "similar" columns into one series for exclusion
-        similar_columns_combined = pd.concat([
-            schema_similarities_df['combined_source'],
-            schema_similarities_df['combined_target']
-        ])
+            # Filter out rows from schema_unique_df that match any in schema_similarities
+            schema_unique_df = schema_unique_df[~schema_unique_df['combined'].isin(similar_columns_combined)]
 
-        # Filter out rows from schema_unique_df that match any in schema_similarities
-        filtered_schema_unique_df = schema_unique_df[~schema_unique_df['combined'].isin(similar_columns_combined)]
+            # drop the combined column not needed anymore
+            schema_unique_df = schema_unique_df.drop(columns=['combined'])
+            schema_similarities_df = schema_similarities_df.drop(columns=['combined_source', 'combined_target'])
 
-        # drop the combined column not needed anymore
-        filtered_schema_unique_df = filtered_schema_unique_df.drop(columns=['combined'])
-        schema_similarities_df = schema_similarities_df.drop(columns=['combined_source', 'combined_target'])
-
-        return schema_same_name_df, schema_similarities_df, filtered_schema_unique_df
+        return schema_same_name_df, schema_similarities_df, schema_unique_df
