@@ -6,6 +6,7 @@ from warnings import filterwarnings
 from .utils import DatabaseUtils
 
 filterwarnings("ignore", category=UserWarning, message='.*pandas only supports SQLAlchemy connectable.*')
+filterwarnings("ignore", category=FutureWarning)
 logger = Logger().get_logger()
 
 
