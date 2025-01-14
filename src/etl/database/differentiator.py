@@ -3,7 +3,7 @@ import pandas as pd
 from ..logger import Logger
 from sqlalchemy import PoolProxiedConnection
 from warnings import filterwarnings
-from utils import DatabaseUtils
+from .utils import DatabaseUtils
 
 filterwarnings("ignore", category=UserWarning, message='.*pandas only supports SQLAlchemy connectable.*')
 logger = Logger().get_logger()
@@ -45,19 +45,21 @@ class Differentiator:
                 if source_name == target_name:
                     same_name_columns.append(
                         {"source_table": source_table, "target_table": target_table, "column_name": source_name})
-
-                similarity_source = source_data.isin(target_datum).mean()
-                similarity_target = target_datum.isin(source_data).mean()
-                similarity = max(similarity_source, similarity_target)
-                if similarity >= self.similarity_threshold:
-                    similar_columns.append({
-                        "source_table": source_table,
-                        "source_column": source_name,
-                        "target_table": target_table,
-                        "target_column": target_name,
-                        "similarity": similarity
-                    })
-                    is_unique_source = False
+                try:
+                    similarity_source = source_col['data'].isin(target_datum).mean()
+                    similarity_target = target_datum.isin(source_col['data']).mean()
+                    similarity = max(similarity_source, similarity_target)
+                    if similarity >= self.similarity_threshold:
+                        similar_columns.append({
+                            "source_table": source_table,
+                            "source_column": source_name,
+                            "target_table": target_table,
+                            "target_column": target_name,
+                            "similarity": similarity
+                        })
+                        is_unique_source = False
+                except (TypeError, ValueError) as e:
+                    logger.debug(f'{source_name} and {target_name} are not comparable: {e}')
 
             if is_unique_source:
                 unique_source_columns.append({"table_name": source_table, "column_name": source_name})
