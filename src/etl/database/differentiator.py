@@ -29,7 +29,7 @@ class Differentiator:
                     column_dict = {
                         "source_table": source_table,
                         "target_table": target_table,
-                        "column": source_column['name']
+                        "column_name": source_column['name']
                     }
                     same_name_columns.append(column_dict)
                 try:
@@ -52,13 +52,13 @@ class Differentiator:
                     logger.debug(f'{source_column["name"]} and {target_column["name"]} are not comparable: {e}')
             if is_unique_source_column:
                 column_dict = {
-                    "table": source_table,
-                    "column": source_column['name']
+                    "table_name": source_table,
+                    "column_name": source_column['name']
                 }
                 unique_source_columns.append(column_dict)
         unique_target_columns = []
         if non_unique_target_columns.__len__() < target_columns.__len__():
-            unique_target_columns = [{"table": target_table, "column": column} for column in target_columns if
+            unique_target_columns = [{"table_name": target_table, "column_name": column} for column in target_columns if
                                      column not in non_unique_target_columns]
 
         similarity_df = pd.DataFrame(similar_columns)
@@ -113,7 +113,7 @@ class Differentiator:
         schema_unique_df = pd.concat(unique_list)
         if not schema_similarities_df.empty:
             # Combine table and column in both DataFrames for comparison
-            schema_unique_df['combined'] = schema_unique_df['table'] + '.' + schema_unique_df['column']
+            schema_unique_df['combined'] = schema_unique_df['table_name'] + '.' + schema_unique_df['column_name']
             schema_similarities_df['combined_source'] = schema_similarities_df['source_table'] + '.' + \
                                                         schema_similarities_df[
                                                             'source_column']
