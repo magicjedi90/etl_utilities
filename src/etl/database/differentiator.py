@@ -1,137 +1,96 @@
 import itertools
-from sqlalchemy import PoolProxiedConnection
 import pandas as pd
 from ..logger import Logger
+from sqlalchemy import PoolProxiedConnection
 from warnings import filterwarnings
+from .utils import DatabaseUtils
 
 filterwarnings("ignore", category=UserWarning, message='.*pandas only supports SQLAlchemy connectable.*')
+filterwarnings("ignore", category=FutureWarning)
 logger = Logger().get_logger()
 
 
 class Differentiator:
-    @staticmethod
-    def find_table_similarities(connection: PoolProxiedConnection, source_schema: str, source_table: str,
-                                target_schema: str, target_table: str, similarity_threshold: float = .8):
-        target_columns = Differentiator.get_column_name_list(connection, target_schema, target_table)
-        source_columns = Differentiator.get_column_name_list(connection, source_schema, source_table)
-        target_column_list = Differentiator.get_column_dict_list(connection, target_columns, target_schema,
-                                                                 target_table)
-        source_column_list = Differentiator.get_column_dict_list(connection, source_columns, source_schema,
-                                                                 source_table)
-        similar_columns = []
-        unique_source_columns = []
-        non_unique_target_columns = []
-        same_name_columns = []
-        for source_column in source_column_list:
-            is_unique_source_column = True
-            for target_column in target_column_list:
-                if source_column['name'] == target_column['name']:
-                    column_dict = {
-                        "source_table": source_table,
-                        "target_table": target_table,
-                        "column_name": source_column['name']
-                    }
-                    same_name_columns.append(column_dict)
-                try:
-                    similarity_source = source_column['data'].isin(target_column['data']).mean()
-                    similarity_target = target_column['data'].isin(source_column['data']).mean()
-                    similarity = max(similarity_source, similarity_target)
-                    if similarity >= similarity_threshold:
-                        is_unique_source_column = False
-                        column_dict = {
-                            "source_table": source_table,
-                            "source_column": source_column['name'],
-                            "target_table": target_table,
-                            "target_column": target_column['name'],
-                            "similarity": similarity
-                        }
-                        similar_columns.append(column_dict)
-                        is_unique_source_column = False
-                        non_unique_target_columns.append(target_column['name'])
-                except (ValueError, TypeError) as e:
-                    logger.debug(f'{source_column["name"]} and {target_column["name"]} are not comparable: {e}')
-            if is_unique_source_column:
-                column_dict = {
-                    "table_name": source_table,
-                    "column_name": source_column['name']
-                }
-                unique_source_columns.append(column_dict)
-        unique_target_columns = []
-        if non_unique_target_columns.__len__() < target_columns.__len__():
-            unique_target_columns = [{"table_name": target_table, "column_name": column} for column in target_columns if
-                                     column not in non_unique_target_columns]
+    """
+    Compares tables and schemas for column similarities, same names, and unique columns.
+    """
 
-        similarity_df = pd.DataFrame(similar_columns)
+    def __init__(self, connection: PoolProxiedConnection, similarity_threshold: float = 0.8):
+        self.db_utils = DatabaseUtils(connection)
+        self.similarity_threshold = similarity_threshold
+
+    def find_table_similarities(self, source_schema: str, source_table: str, target_schema: str, target_table: str):
+        source_columns = self.db_utils.get_column_names(source_schema, source_table)
+        target_columns = self.db_utils.get_column_names(target_schema, target_table)
+
+        source_data = [
+            {"name": col, "data": self.db_utils.get_column_data(source_schema, source_table, col)}
+            for col in source_columns
+        ]
+        target_data = [
+            {"name": col, "data": self.db_utils.get_column_data(target_schema, target_table, col)}
+            for col in target_columns
+        ]
+
+        return self._compare_tables(source_data, target_data, source_table, target_table)
+
+    def _compare_tables(self, source_data: list, target_data: list, source_table: str, target_table: str):
+        similar_columns, same_name_columns, unique_source_columns, unique_target_columns = [], [], [], []
+        target_column_map = {col['name']: col['data'] for col in target_data}
+
+        for source_col in source_data:
+            source_name = source_col['name']
+            is_unique_source = True
+
+            for target_name, target_datum in target_column_map.items():
+                if source_name == target_name:
+                    same_name_columns.append(
+                        {"source_table": source_table, "target_table": target_table, "column_name": source_name})
+                try:
+                    similarity_source = source_col['data'].isin(target_datum).mean()
+                    similarity_target = target_datum.isin(source_col['data']).mean()
+                    similarity = max(similarity_source, similarity_target)
+                    if similarity >= self.similarity_threshold:
+                        similar_columns.append({
+                            "source_table": source_table,
+                            "source_column": source_name,
+                            "target_table": target_table,
+                            "target_column": target_name,
+                            "similarity": similarity
+                        })
+                        is_unique_source = False
+                except (TypeError, ValueError) as e:
+                    logger.debug(f'{source_name} and {target_name} are not comparable: {e}')
+
+            if is_unique_source:
+                unique_source_columns.append({"table_name": source_table, "column_name": source_name})
+
+        unique_target_columns = [
+            {"table_name": target_table, "column_name": col['name']}
+            for col in target_data if col['name'] not in [s['name'] for s in source_data]
+        ]
+
+        return self._create_dataframes(same_name_columns, similar_columns, unique_source_columns, unique_target_columns)
+
+    @staticmethod
+    def _create_dataframes(same_name_columns, similar_columns, unique_source_columns, unique_target_columns):
         same_name_df = pd.DataFrame(same_name_columns)
-        unique_source_df = pd.DataFrame(unique_source_columns)
-        unique_target_df = pd.DataFrame(unique_target_columns)
-        unique_df = pd.concat([unique_source_df, unique_target_df])
+        similarity_df = pd.DataFrame(similar_columns)
+        unique_df = pd.concat([pd.DataFrame(unique_source_columns), pd.DataFrame(unique_target_columns)],
+                              ignore_index=True)
         return similarity_df, same_name_df, unique_df
 
-    @staticmethod
-    def get_column_dict_list(connection, column_names, schema, table):
-        source_column_list = []
-        for column in column_names:
-            query = f'select distinct ([{column}]) from {schema}.{table}'
-            column_series = pd.read_sql(query, connection)[column]
-            column_series = column_series.dropna()
-            column_dict = {"name": column, "data": column_series}
-            source_column_list.append(column_dict)
-        return source_column_list
+    def find_schema_similarities(self, schema: str):
+        table_list = self.db_utils.get_table_list(schema)
+        similarity_list, same_name_list, unique_list = [], [], []
 
-    @staticmethod
-    def get_column_name_list(connection, schema, table):
-        get_target_column_info_query = (
-            f'select COLUMN_NAME '
-            f'from INFORMATION_SCHEMA.columns '
-            f'where table_schema = \'{schema}\' and table_name = \'{table}\'')
-        target_column_info_df = pd.read_sql(get_target_column_info_query, connection)
-        target_columns = target_column_info_df['COLUMN_NAME'].tolist()
-        return target_columns
-
-    @staticmethod
-    def find_table_similarities_in_schema(connection: PoolProxiedConnection, schema: str,
-                                          similarity_threshold: float = .8):
-        get_table_info_query = (
-            f'select TABLE_NAME from INFORMATION_SCHEMA.TABLES '
-            f'where TABLE_SCHEMA = \'{schema}\' and TABLE_TYPE = \'BASE TABLE\';'
-        )
-        table_info_df = pd.read_sql(get_table_info_query, connection)
-        table_list = table_info_df['TABLE_NAME'].tolist()
-        same_name_list = []
-        similarity_list = []
-        unique_list = []
-        for table_set in itertools.combinations(table_list, 2):
-            logger.info(f'comparing {table_set[0]} and {table_set[1]}')
-            similarity_df, same_name_df, unique_df = Differentiator.find_table_similarities(
-                connection, schema, table_set[0], schema, table_set[1], similarity_threshold)
-            same_name_list.append(same_name_df)
+        for source_table, target_table in itertools.combinations(table_list, 2):
+            logger.info(f"Comparing {source_table} and {target_table}")
+            similarity_df, same_name_df, unique_df = self.find_table_similarities(schema, source_table, schema,
+                                                                                  target_table)
             similarity_list.append(similarity_df)
+            same_name_list.append(same_name_df)
             unique_list.append(unique_df)
-        schema_similarities_df = pd.concat(similarity_list)
-        schema_same_name_df = pd.concat(same_name_list)
-        schema_unique_df = pd.concat(unique_list)
-        if not schema_similarities_df.empty:
-            # Combine table and column in both DataFrames for comparison
-            schema_unique_df['combined'] = schema_unique_df['table_name'] + '.' + schema_unique_df['column_name']
-            schema_similarities_df['combined_source'] = schema_similarities_df['source_table'] + '.' + \
-                                                        schema_similarities_df[
-                                                            'source_column']
-            schema_similarities_df['combined_target'] = schema_similarities_df['target_table'] + '.' + \
-                                                        schema_similarities_df[
-                                                            'target_column']
 
-            # Combine all "similar" columns into one series for exclusion
-            similar_columns_combined = pd.concat([
-                schema_similarities_df['combined_source'],
-                schema_similarities_df['combined_target']
-            ])
-
-            # Filter out rows from schema_unique_df that match any in schema_similarities
-            schema_unique_df = schema_unique_df[~schema_unique_df['combined'].isin(similar_columns_combined)]
-
-            # drop the combined column not needed anymore
-            schema_unique_df = schema_unique_df.drop(columns=['combined'])
-            schema_similarities_df = schema_similarities_df.drop(columns=['combined_source', 'combined_target'])
-
-        return schema_same_name_df, schema_similarities_df, schema_unique_df
+        return pd.concat(same_name_list, ignore_index=True), pd.concat(similarity_list, ignore_index=True), pd.concat(
+            unique_list, ignore_index=True)
