@@ -102,6 +102,7 @@ class Differentiator:
         similarity_list = []
         unique_list = []
         for table_set in itertools.combinations(table_list, 2):
+            logger.info(f'comparing {table_set[0]} and {table_set[1]}')
             similarity_df, same_name_df, unique_df = Differentiator.find_table_similarities(
                 connection, schema, table_set[0], schema, table_set[1], similarity_threshold)
             same_name_list.append(same_name_df)
