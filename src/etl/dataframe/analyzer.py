@@ -49,6 +49,8 @@ class Analyzer:
     @staticmethod
     def generate_column_metadata(df: pd.DataFrame, primary_key: str, unique_columns: list[str], decimal_places: int) -> list[dict]:
         column_metadata_list = []
+        if df.empty:
+            return []
         for column, series in df.items():
             column_metadata = {
                 'column_name': column,

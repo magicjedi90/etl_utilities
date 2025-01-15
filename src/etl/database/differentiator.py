@@ -91,6 +91,11 @@ class Differentiator:
             similarity_list.append(similarity_df)
             same_name_list.append(same_name_df)
             unique_list.append(unique_df)
-
-        return pd.concat(same_name_list, ignore_index=True), pd.concat(similarity_list, ignore_index=True), pd.concat(
-            unique_list, ignore_index=True)
+        schema_same_name, schema_similarity, schema_unique = None, None, None
+        if len(same_name_list) > 0:
+            schema_same_name = pd.concat(same_name_list, ignore_index=True)
+        if len(similarity_list) > 0:
+            schema_similarity = pd.concat(similarity_list, ignore_index=True)
+        if len(unique_list) > 0:
+            schema_unique = pd.concat(unique_list, ignore_index=True)
+        return schema_same_name, schema_similarity, schema_unique

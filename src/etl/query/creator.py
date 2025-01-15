@@ -27,6 +27,8 @@ class Creator:
                            generate_id: bool = False) -> str:
         location = f'{schema}.[{table}]'
         column_metadata = Analyzer.generate_column_metadata(df, primary_key, unique_columns, decimal_places)
+        if len(column_metadata) < 1:
+            return ''
         column_type_list = []
         if generate_id:
             id_string = f'id int identity constraint pk_{table}_id primary key'
