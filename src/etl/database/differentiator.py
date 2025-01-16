@@ -6,7 +6,6 @@ from warnings import filterwarnings
 from .utils import DatabaseUtils
 
 filterwarnings("ignore", category=UserWarning, message='.*pandas only supports SQLAlchemy connectable.*')
-filterwarnings("ignore", category=FutureWarning)
 logger = Logger().get_logger()
 
 
@@ -20,42 +19,49 @@ class Differentiator:
         self.similarity_threshold = similarity_threshold
 
     def find_table_similarities(self, source_schema: str, source_table: str, target_schema: str, target_table: str):
-        source_columns = self.db_utils.get_column_names(source_schema, source_table)
-        target_columns = self.db_utils.get_column_names(target_schema, target_table)
-
-        source_data = [
-            {"name": col, "data": self.db_utils.get_column_data(source_schema, source_table, col)}
-            for col in source_columns
-        ]
-        target_data = [
-            {"name": col, "data": self.db_utils.get_column_data(target_schema, target_table, col)}
-            for col in target_columns
-        ]
+        source_columns = self.db_utils.get_column_names_and_types(source_schema, source_table)
+        target_columns = self.db_utils.get_column_names_and_types(target_schema, target_table)
+        source_data, target_data = [], []
+        for row in source_columns.itertuples(index=False):
+            source_data.append({"name": row[0], "type": row[1],
+                                "data": self.db_utils.get_column_data(source_schema, source_table, row[0])})
+        for row in target_columns.itertuples(index=False):
+            target_data.append({"name": row[0], "type": row[1],
+                                "data": self.db_utils.get_column_data(target_schema, target_table, row[0])})
 
         return self._compare_tables(source_data, target_data, source_table, target_table)
 
     def _compare_tables(self, source_data: list, target_data: list, source_table: str, target_table: str):
         similar_columns, same_name_columns, unique_source_columns, unique_target_columns = [], [], [], []
-        target_column_map = {col['name']: col['data'] for col in target_data}
+        # target_column_map = {col['name']: col['data'] for col in target_data}
 
         for source_col in source_data:
             source_name = source_col['name']
+            source_type = source_col['type']
+            source_datum = source_col['data']
             is_unique_source = True
 
-            for target_name, target_datum in target_column_map.items():
+            for target_col in target_data:
+                target_name = target_col['name']
+                target_type = target_col['type']
+                target_datum = target_col['data']
                 if source_name == target_name:
                     same_name_columns.append(
                         {"source_table": source_table, "target_table": target_table, "column_name": source_name})
+                if source_type != target_type:
+                    continue
                 try:
-                    similarity_source = source_col['data'].isin(target_datum).mean()
-                    similarity_target = target_datum.isin(source_col['data']).mean()
+                    similarity_source = source_datum.isin(target_datum).mean()
+                    similarity_target = target_datum.isin(source_datum).mean()
                     similarity = max(similarity_source, similarity_target)
+
                     if similarity >= self.similarity_threshold:
                         similar_columns.append({
                             "source_table": source_table,
                             "source_column": source_name,
                             "target_table": target_table,
                             "target_column": target_name,
+                            "data_type": source_type,
                             "similarity": similarity
                         })
                         is_unique_source = False

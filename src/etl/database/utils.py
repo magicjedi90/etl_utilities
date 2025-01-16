@@ -1,4 +1,5 @@
 import pandas as pd
+from pandas import DataFrame
 from sqlalchemy import PoolProxiedConnection
 
 
@@ -17,12 +18,12 @@ class DatabaseUtils:
         )
         return pd.read_sql(query, self.connection)['TABLE_NAME'].tolist()
 
-    def get_column_names(self, schema: str, table: str) -> list:
+    def get_column_names_and_types(self, schema: str, table: str) -> DataFrame:
         query = (
-            f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+            f"SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS "
             f"WHERE TABLE_SCHEMA = '{schema}' AND TABLE_NAME = '{table}';"
         )
-        return pd.read_sql(query, self.connection)['COLUMN_NAME'].tolist()
+        return pd.read_sql(query, self.connection)
 
     def get_column_data(self, schema: str, table: str, column: str) -> pd.Series:
         query = f"SELECT DISTINCT [{column}] FROM {schema}.{table}"
