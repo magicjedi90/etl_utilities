@@ -104,4 +104,27 @@ class Differentiator:
             schema_similarity = pd.concat(similarity_list, ignore_index=True)
         if len(unique_list) > 0:
             schema_unique = pd.concat(unique_list, ignore_index=True)
+
+        # Combine table and column in both DataFrames for comparison
+        if schema_unique is not None:
+            schema_unique['combined'] = schema_unique['table_name'] + '.' + schema_unique['column_name']
+            schema_similarity['combined_source'] = schema_similarity['source_table'] + '.' + \
+                                                        schema_similarity[
+                                                            'source_column']
+            schema_similarity['combined_target'] = schema_similarity['target_table'] + '.' + \
+                                                        schema_similarity[
+                                                            'target_column']
+
+            # Combine all "similar" columns into one series for exclusion
+            similar_columns_combined = pd.concat([
+                schema_similarity['combined_source'],
+                schema_similarity['combined_target']
+            ])
+
+            # Filter out rows from schema_unique that match any in schema_similarity
+            schema_unique = schema_unique[~schema_unique['combined'].isin(similar_columns_combined)]
+
+            # drop the combined column, not needed anymore
+            schema_unique = schema_unique.drop(columns=['combined'])
+            schema_similarity = schema_similarity.drop(columns=['combined_source', 'combined_target'])
         return schema_same_name, schema_similarity, schema_unique
