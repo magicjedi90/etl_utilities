@@ -75,16 +75,12 @@ class Differentiator:
             {"table_name": target_table, "column_name": col['name']}
             for col in target_data if col['name'] not in [s['name'] for s in source_data]
         ]
-
-        return self._create_dataframes(same_name_columns, similar_columns, unique_source_columns, unique_target_columns)
-
-    @staticmethod
-    def _create_dataframes(same_name_columns, similar_columns, unique_source_columns, unique_target_columns):
         same_name_df = pd.DataFrame(same_name_columns)
         similarity_df = pd.DataFrame(similar_columns)
         unique_df = pd.concat([pd.DataFrame(unique_source_columns), pd.DataFrame(unique_target_columns)],
                               ignore_index=True)
         return similarity_df, same_name_df, unique_df
+
 
     def find_schema_similarities(self, schema: str):
         table_list = self.db_utils.get_table_list(schema)
