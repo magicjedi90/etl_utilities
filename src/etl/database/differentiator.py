@@ -29,10 +29,7 @@ class Differentiator:
             target_data.append({"name": row[0], "type": row[1],
                                 "data": self.db_utils.get_column_data(target_schema, target_table, row[0])})
 
-        return self._compare_tables(source_data, target_data, source_table, target_table)
-
-    def _compare_tables(self, source_data: list, target_data: list, source_table: str, target_table: str):
-        similar_columns, same_name_columns, unique_source_columns, unique_target_columns = [], [], [], []
+        similar_columns, same_name_columns, unique_source_columns, non_unique_target_columns, unique_target_columns = [], [], [], [], []
         # target_column_map = {col['name']: col['data'] for col in target_data}
 
         for source_col in source_data:
@@ -65,6 +62,7 @@ class Differentiator:
                             "similarity": similarity
                         })
                         is_unique_source = False
+                        non_unique_target_columns.append(target_name)
                 except (TypeError, ValueError) as e:
                     logger.debug(f'{source_name} and {target_name} are not comparable: {e}')
 
@@ -73,14 +71,13 @@ class Differentiator:
 
         unique_target_columns = [
             {"table_name": target_table, "column_name": col['name']}
-            for col in target_data if col['name'] not in [s['name'] for s in source_data]
+            for col in target_data if col['name'] not in non_unique_target_columns
         ]
         same_name_df = pd.DataFrame(same_name_columns)
         similarity_df = pd.DataFrame(similar_columns)
         unique_df = pd.concat([pd.DataFrame(unique_source_columns), pd.DataFrame(unique_target_columns)],
                               ignore_index=True)
         return similarity_df, same_name_df, unique_df
-
 
     def find_schema_similarities(self, schema: str):
         table_list = self.db_utils.get_table_list(schema)
@@ -105,11 +102,11 @@ class Differentiator:
         if schema_unique is not None:
             schema_unique['combined'] = schema_unique['table_name'] + '.' + schema_unique['column_name']
             schema_similarity['combined_source'] = schema_similarity['source_table'] + '.' + \
-                                                        schema_similarity[
-                                                            'source_column']
+                                                   schema_similarity[
+                                                       'source_column']
             schema_similarity['combined_target'] = schema_similarity['target_table'] + '.' + \
-                                                        schema_similarity[
-                                                            'target_column']
+                                                   schema_similarity[
+                                                       'target_column']
 
             # Combine all "similar" columns into one series for exclusion
             similar_columns_combined = pd.concat([
