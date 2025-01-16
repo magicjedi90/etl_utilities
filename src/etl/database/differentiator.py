@@ -99,7 +99,7 @@ class Differentiator:
             schema_unique = pd.concat(unique_list, ignore_index=True)
 
         # Combine table and column in both DataFrames for comparison
-        if schema_unique is not None and schema_similarity is not None:
+        if schema_unique is not None and schema_similarity is not None and not schema_unique.empty and not schema_similarity.empty:
             schema_unique['combined'] = schema_unique['table_name'] + '.' + schema_unique['column_name']
             schema_similarity['combined_source'] = schema_similarity['source_table'] + '.' + \
                                                    schema_similarity[
