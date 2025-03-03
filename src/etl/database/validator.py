@@ -91,6 +91,10 @@ class Validator:
     def _is_type_mismatch(df_column_data_type, db_column_data_type):
         for db_type in constants.DB_TYPES:
             if db_column_data_type in db_type and df_column_data_type not in db_type:
+                if df_column_data_type == 'integer' and 'float' in db_type:
+                    return False
+                if df_column_data_type == 'boolean' and ('float' in db_type or 'integer' in db_type):
+                    return False
                 return True
         return False
 
