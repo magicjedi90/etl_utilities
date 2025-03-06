@@ -4,7 +4,9 @@ import pandas as pd
 from dateutil import parser
 from ..dataframe.parser import Parser
 from ..logger import Logger
+
 logger = Logger().get_logger()
+
 
 def compute_hash(value) -> str:
     """
@@ -25,8 +27,9 @@ def standardize_column_name(name) -> str:
     """
     name = (str(name).strip()
             .replace('?', '').replace('(', '').replace(')', '')
-            .replace('\\', '').replace(',', '').replace('/','')
-            .replace('\'','').replace('#', 'Num').replace('$', 'Dollars'))
+            .replace('\\', '').replace(',', '').replace('/', '')
+            .replace('\'', '').replace('#', 'Num').replace('$', 'Dollars')
+            .replace('&', 'And'))
     name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
     name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
     return (name.replace('.', '_').replace(':', '_').replace(' ', '_')
