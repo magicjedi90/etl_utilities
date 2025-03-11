@@ -91,6 +91,8 @@ class Validator:
     def _is_type_mismatch(df_column_data_type, db_column_data_type):
         for db_type in constants.DB_TYPES:
             if db_column_data_type in db_type and df_column_data_type not in db_type:
+                if 'string' in db_type:
+                    return False
                 if df_column_data_type == 'integer' and 'float' in db_type:
                     return False
                 if df_column_data_type == 'boolean' and ('float' in db_type or 'integer' in db_type):
@@ -105,7 +107,7 @@ class Validator:
         if df_numeric_precision is None:
             return
         if df_numeric_precision > db_column_numeric_precision:
-            return f'{column["column_name"]} needs a minimum of {df_numeric_precision} precision to be inserted'
+            return f'{column["column_name"]} needs a minimum of {df_numeric_precision} precision to be inserted\n'
 
     @staticmethod
     def _check_string_or_date_truncation(column, db_column_info):
@@ -116,7 +118,7 @@ class Validator:
         if db_column_string_length == -1:
             return
         if df_max_string_length > db_column_string_length:
-            return f'{column["column_name"]} needs a minimum of {df_max_string_length} size to be inserted'
+            return f'{column["column_name"]} needs a minimum of {df_max_string_length} size to be inserted\n'
 
     def validate(self):
         return self.validate_upload(self._connection, self._df, self._schema, self._table)
