@@ -1,6 +1,6 @@
 from pandas import DataFrame
 from sqlalchemy import PoolProxiedConnection
-
+from .extra_column_exception import ExtraColumnsException
 from ..dataframe.analyzer import Analyzer
 from .. import constants
 import pandas as pd
@@ -51,10 +51,7 @@ class Validator:
         new_columns = np.setdiff1d(df.columns.tolist(), db_columns)
         if new_columns.size > 0:
             extra_columns_df = df[new_columns]
-            column_metadata = Analyzer.generate_column_metadata(extra_columns_df, None, None, 2)
-            extra_columns_string = "\n".join([column.__str__() for column in column_metadata])
-            type_mismatch_error_message = f'The table {schema}.{table} is missing the following columns:\n {extra_columns_string}'
-            raise ExtraColumnsException(type_mismatch_error_message)
+            raise ExtraColumnsException(extra_columns_df)
 
     @staticmethod
     def _validate_column_types(df_metadata, column_info_df):
@@ -79,8 +76,8 @@ class Validator:
                 truncate_message = Validator._check_numeric_truncation(column, db_column_info)
                 if truncate_message is not None:
                     truncated_columns.append(truncate_message)
-            elif df_column_data_type in constants.DB_DATE_TYPES + constants.DB_STR_TYPES:
-                truncate_message = Validator._check_string_or_date_truncation(column, db_column_info)
+            elif df_column_data_type in constants.DB_STR_TYPES:
+                truncate_message = Validator._check_string_truncation(column, db_column_info)
                 if truncate_message is not None:
                     truncated_columns.append(truncate_message)
         if type_mismatch_columns or truncated_columns:
@@ -109,8 +106,9 @@ class Validator:
         if df_numeric_precision > db_column_numeric_precision:
             return f'{column["column_name"]} needs a minimum of {df_numeric_precision} precision to be inserted\n'
 
+
     @staticmethod
-    def _check_string_or_date_truncation(column, db_column_info):
+    def _check_string_truncation(column, db_column_info):
         df_max_string_length = column['max_str_size']
         db_column_string_length = db_column_info.get('CHARACTER_MAXIMUM_LENGTH')
         if df_max_string_length is None:
@@ -123,14 +121,6 @@ class Validator:
     def validate(self):
         return self.validate_upload(self._connection, self._df, self._schema, self._table)
 
-class ExtraColumnsException(Exception):
-    """
-    This class represents an exception that is raised when there are extra columns
-    in a dataset that are not expected.
-
-    :param Exception: The base exception class.
-    """
-    pass
 
 
 class ColumnDataException(Exception):

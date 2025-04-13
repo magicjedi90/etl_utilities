@@ -1,6 +1,5 @@
 import unittest
 import pandas as pd
-import numpy as np
 from unittest.mock import Mock, patch
 from src.etl.database.validator import Validator, ExtraColumnsException, ColumnDataException
 from src.etl.dataframe.analyzer import Analyzer
@@ -67,15 +66,15 @@ class TestValidator(unittest.TestCase):
 
     def test_mismatched_columns(self):
         # Create a DataFrame with mismatched columns
-        df = pd.DataFrame({'col1': [1, 2, 3], 'mismatched_col': [4, 5, 6]})
+        df = pd.DataFrame({'wrong_type_col': ['one', 'two', 'three']})
         column_info_df = pd.DataFrame({
-            'COLUMN_NAME': ['col1', 'mismatched_col'],
-            'DATA_TYPE': ['int', 'varchar'],
-            'CHARACTER_MAXIMUM_LENGTH': [None, 255],
-            'NUMERIC_PRECISION': [1, None]
+            'COLUMN_NAME': ['wrong_type_col'],
+            'DATA_TYPE': ['int'],
+            'CHARACTER_MAXIMUM_LENGTH': [None],
+            'NUMERIC_PRECISION': [1]
         })
 
-        df_metadata = Analyzer.generate_column_metadata(df, None, None, 2)
+        df_metadata = Analyzer.generate_column_metadata(df, None, None, 0)
 
         with self.assertRaises(ColumnDataException):
             Validator._validate_column_types(df_metadata, column_info_df)
