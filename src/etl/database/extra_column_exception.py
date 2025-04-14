@@ -10,13 +10,13 @@ class ExtraColumnsException(Exception):
         extra_column_string_list = []
         for column in self.column_metadata:
             if column['data_type'] == 'string':
-                extra_column_string = f'name: {column['column_name']} \t type: {column['data_type']} \t max_size: {column['max_str_size']}'
+                extra_column_string = f"name: {column['column_name']} \t type: {column['data_type']} \t max_size: {column['max_str_size']}"
             elif column['data_type'] == 'float':
-                extra_column_string = f'name: {column['column_name']} \t type: {column['data_type']} \t float_precision: {column['float_precision']}'
+                extra_column_string = f"name: {column['column_name']} \t type: {column['data_type']} \t float_precision: {column['float_precision']}"
             elif column['data_type'] == 'integer':
-                extra_column_string = f'name: {column['column_name']} \t type: {column['data_type']} \t biggest_number: {column['biggest_num']} \t smallest_number: {column['smallest_num']}'
+                extra_column_string = f"name: {column['column_name']} \t type: {column['data_type']} \t biggest_number: {column['biggest_num']} \t smallest_number: {column['smallest_num']}"
             else:
-                extra_column_string = f'name: {column['column_name']} \t type: {column['data_type']}'
+                extra_column_string = f"name: {column['column_name']} \t type: {column['data_type']}"
             extra_column_string_list.append(extra_column_string)
 
         extra_columns_string = "\n".join(extra_column_string_list)
