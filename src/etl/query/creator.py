@@ -38,13 +38,13 @@ def build_column_fragments(
 
     for column_info in column_metadata:
         column_name = column_info["column_name"]
-        quoted_column = f"{dialect.opening_quote}{column_name}{dialect.closing_quote}"
+        escaped_column = f"{dialect.opening_escape}{column_name}{dialect.closing_escape}"
 
         # -------------- empty column ----------------------------------------
         if column_info["is_empty"]:
             if dialect.name == "mssql":
                 logger.info("%s is empty – setting to nvarchar(max)", column_name)
-                fragments.append(f"{quoted_column} nvarchar(max)")
+                fragments.append(f"{escaped_column} nvarchar(max)")
             else:  # MariaDB – silently skip empty columns
                 logger.info("%s is empty – skipping", column_name)
             continue
@@ -54,12 +54,12 @@ def build_column_fragments(
         data_definition_clause: str | None = None
 
         if data_type == "datetime":
-            data_definition_clause = f"{quoted_column} {dialect.datetime_type}"
+            data_definition_clause = f"{escaped_column} {dialect.datetime_type}"
 
         elif data_type == "float":
             precision_to_use = max(float_precision, column_info["float_precision"])
             data_definition_clause = (
-                f"{quoted_column} decimal({precision_to_use}, {decimal_places})"
+                f"{escaped_column} decimal({precision_to_use}, {decimal_places})"
             )
 
         elif data_type == "integer":
@@ -67,33 +67,33 @@ def build_column_fragments(
             largest = column_info["biggest_num"]
 
             if smallest < -2147483648 or largest > 2147483648:
-                data_definition_clause = f"{quoted_column} bigint"
+                data_definition_clause = f"{escaped_column} bigint"
             if smallest >= -2147483648 and largest <= 2147483648:
-                data_definition_clause = f"{quoted_column} int"
+                data_definition_clause = f"{escaped_column} int"
             if smallest >= -32768 and largest <= 32768:
-                data_definition_clause = f"{quoted_column} smallint"
+                data_definition_clause = f"{escaped_column} smallint"
             if dialect.name == "mssql" and 0 <= smallest <= largest <= 255:
-                data_definition_clause = f"{quoted_column} tinyint"
+                data_definition_clause = f"{escaped_column} tinyint"
             if dialect.name == "mariadb" and -128 <= smallest <= largest <= 127:
-                data_definition_clause = f"{quoted_column} tinyint"
+                data_definition_clause = f"{escaped_column} tinyint"
 
         elif data_type == "boolean":
-            data_definition_clause = f"{quoted_column} {dialect.boolean_type}"
+            data_definition_clause = f"{escaped_column} {dialect.boolean_type}"
 
         elif data_type == "string":
             required_length = column_info["max_str_size"] + varchar_padding
             if dialect.maximum_varchar_length is None:
                 # Microsoft SQL Server
                 if required_length >= 4000:
-                    data_definition_clause = f"{quoted_column} nvarchar(max)"
+                    data_definition_clause = f"{escaped_column} nvarchar(max)"
                 else:
-                    data_definition_clause = f"{quoted_column} nvarchar({required_length})"
+                    data_definition_clause = f"{escaped_column} nvarchar({required_length})"
             else:
                 if required_length > dialect.maximum_varchar_length:
                     logger.info(
                         f"{column_name} exceeds varchar({dialect.maximum_varchar_length}) – skipping")
                     continue
-                data_definition_clause = f"{quoted_column} varchar({required_length})"
+                data_definition_clause = f"{escaped_column} varchar({required_length})"
 
         if data_definition_clause is None:  # Defensive guard
             continue

@@ -7,20 +7,28 @@ from typing import Callable
 @dataclasses.dataclass(slots=True, frozen=True)
 class SqlDialect:
     name: str
-    opening_quote: str
-    closing_quote: str
+    opening_escape: str
+    closing_escape: str
     datetime_type: str
     boolean_type: str
-    maximum_varchar_length: int | None            # None == “unlimited”
+    maximum_varchar_length: int | None
     identity_fragment_function: Callable[[str], str]
     primary_key_fragment_function: Callable[[str, str], str]
     unique_key_fragment_function: Callable[[str, str], str]
+    placeholder: str
+
+    # Helper so Loader does not have to know quoting rules
+    def escape(self, identifier: str) -> str:               # noqa: D401
+        """Return correctly escaped identifier for this dialect."""
+        return f"{self.opening_escape}{identifier}{self.closing_escape}"
+
+
 
 
 mssql = SqlDialect(
     name="mssql",
-    opening_quote="[",
-    closing_quote="]",
+    opening_escape="[",
+    closing_escape="]",
     datetime_type="datetime2",
     boolean_type="bit",
     maximum_varchar_length=None,  # None means nvarchar(max) is allowed
@@ -33,12 +41,13 @@ mssql = SqlDialect(
     unique_key_fragment_function=lambda table, column: (
         f" constraint ak_{table}_{column} unique"
     ),
+    placeholder="?"
 )
 
 mariadb = SqlDialect(
     name="mariadb",
-    opening_quote="`",
-    closing_quote="`",
+    opening_escape="`",
+    closing_escape="`",
     datetime_type="datetime",
     boolean_type="bit",
     maximum_varchar_length=21844,
@@ -51,13 +60,14 @@ mariadb = SqlDialect(
     unique_key_fragment_function=lambda table, column: (
         f"constraint ak_{table}_{column} unique ({column})"
     ),
+    placeholder="%s"
 )
 
 
 postgres = SqlDialect(
     name='postgres',
-    opening_quote='"',
-    closing_quote='"',
+    opening_escape='"',
+    closing_escape='"',
     datetime_type='timestamptz',
     boolean_type='boolean',
     maximum_varchar_length=10485760,
@@ -67,4 +77,8 @@ postgres = SqlDialect(
     primary_key_fragment_function=lambda table, column: (
         f" constraint pk_{table}_{column} primary key"
     ),
+    unique_key_fragment_function=lambda table, column: (
+        f" constraint ak_{table}_{column} unique"
+    ),
+    placeholder="?",
 )
