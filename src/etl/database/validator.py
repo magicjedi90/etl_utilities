@@ -31,7 +31,7 @@ class Validator:
     @staticmethod
     def validate_upload(connection: PoolProxiedConnection, df: pd.DataFrame, schema: str, table: str)  -> None:
         df_metadata, column_info_df = Validator._fetch_column_info(connection, df, schema, table)
-        Validator._check_extra_columns(df, column_info_df, schema, table)
+        Validator._check_extra_columns(df, column_info_df)
         Validator._validate_column_types(df_metadata, column_info_df)
 
     @staticmethod
@@ -46,7 +46,7 @@ class Validator:
         return df_metadata, column_info_df
 
     @staticmethod
-    def _check_extra_columns(df, column_info_df, schema, table):
+    def _check_extra_columns(df, column_info_df):
         db_columns = column_info_df['COLUMN_NAME'].tolist()
         new_columns = np.setdiff1d(df.columns.tolist(), db_columns)
         if new_columns.size > 0:
@@ -102,21 +102,23 @@ class Validator:
         df_numeric_precision = column['float_precision']
         db_column_numeric_precision = db_column_info['NUMERIC_PRECISION']
         if df_numeric_precision is None:
-            return
+            return None
         if df_numeric_precision > db_column_numeric_precision:
             return f'{column["column_name"]} needs a minimum of {df_numeric_precision} precision to be inserted\n'
-
+        return None
 
     @staticmethod
     def _check_string_truncation(column, db_column_info):
         df_max_string_length = column['max_str_size']
         db_column_string_length = db_column_info.get('CHARACTER_MAXIMUM_LENGTH')
         if df_max_string_length is None:
-            return
+            return None
         if db_column_string_length == -1:
-            return
+            return None
         if df_max_string_length > db_column_string_length:
             return f'{column["column_name"]} needs a minimum of {df_max_string_length} size to be inserted\n'
+        return None
+
 
     def validate(self):
         return self.validate_upload(self._connection, self._df, self._schema, self._table)
