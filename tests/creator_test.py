@@ -2,6 +2,7 @@ import unittest
 import pandas as pd
 from datetime import datetime
 from src.etl.query.creator import Creator
+from src.etl.database.sql_dialects import mssql, mariadb
 
 
 class TestTableMaker(unittest.TestCase):
@@ -18,7 +19,7 @@ class TestTableMaker(unittest.TestCase):
         })
 
         expected_query = (
-            "create table dbo.[test_table]\n(\n"
+            "create table dbo.test_table\n(\n"
             "[id_column] bigint constraint pk_test_table_id_column primary key,\n"
             "\t[int_column] tinyint,\n"
             "\t[float_column] decimal(10, 2),\n"
@@ -36,8 +37,8 @@ class TestTableMaker(unittest.TestCase):
             " with \n(\tsystem_versioning = on (history_table = dbo.[test_table_history])\n);"
         )
 
-        actual_query = Creator.create_mssql_table(df, 'dbo', 'test_table',
-                                                  primary_key='id_column', history=True)
+        actual_query = Creator.create_table(df, 'dbo', 'test_table', mssql,
+                                                  primary_key_column='id_column', history=True)
 
         self.assertEqual(expected_query, actual_query)
 
