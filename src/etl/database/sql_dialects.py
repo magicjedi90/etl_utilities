@@ -80,5 +80,5 @@ postgres = SqlDialect(
     unique_key_fragment_function=lambda table, column: (
         f" constraint ak_{table}_{column} unique"
     ),
-    placeholder="?",
+    placeholder="%s",
 )

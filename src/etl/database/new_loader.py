@@ -6,11 +6,11 @@ import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
 from sqlalchemy.engine.interfaces import DBAPICursor
-
+from psycopg2.extras import execute_values
 from .sql_dialects import SqlDialect
 from .. import constants
 
-MAX_PARAM_PER_STATEMENT = 2000            # safe default for most engines
+MAX_PARAM_PER_STATEMENT = 2000  # safe default for most engines
 
 
 class Loader:
@@ -18,17 +18,17 @@ class Loader:
     Generic DataFrame-to-SQL loader.
 
     Two public upload helpers:
-        • insert_bulk    – INSERT INTO … VALUES (…), (…), …
-        • insert_union   – INSERT INTO … SELECT … UNION ALL SELECT …
+        • insert – INSERT INTO … VALUES (…), (…), …
+        • insert_union – INSERT INTO … SELECT … UNION ALL SELECT …
     """
 
     def __init__(
-        self,
-        cursor: DBAPICursor,
-        df: pd.DataFrame,
-        schema: str,
-        table: str,
-        dialect: SqlDialect,
+            self,
+            cursor: DBAPICursor,
+            df: pd.DataFrame,
+            schema: str,
+            table: str,
+            dialect: SqlDialect,
     ) -> None:
         self._cursor = cursor
         self._df = df
@@ -60,7 +60,7 @@ class Loader:
             if max_size > 256:
                 if self._dialect.name == "mssql":
                     placeholders.append('cast ( ? as nvarchar(max))')
-                elif self._dialect.name == "mariadb":
+                else:
                     placeholders.append('cast ( %s as varchar(21844))')
             else:
                 placeholders.append(self._placeholder)
@@ -107,11 +107,11 @@ class Loader:
 
     # ―――― generic executor with progress bar ―――― #
     def _run_progress(
-        self,
-        rows: List[tuple],
-        *,
-        batch_size: int,
-        build_query,
+            self,
+            rows: List[tuple],
+            *,
+            batch_size: int,
+            build_query,
     ) -> None:
         """
         Execute query builder in chunks with a progress bar.
@@ -119,10 +119,10 @@ class Loader:
         """
         total_rows = len(rows)
         with Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            MofNCompleteColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                MofNCompleteColumn(),
         ) as progress:
             task_id = progress.add_task(f"loading {self._location}", total=total_rows)
 
@@ -137,12 +137,11 @@ class Loader:
                 try:
                     # build_query is a function, expected to return a single SQL string for the chunk
                     query = build_query(chunk)
-                    # Parameters need to be flattened from the chunk of tuples
-                    data = [value for row in chunk for value in row]
-                    self._cursor.executemany(query, data)
-
-
-                except Exception:    # pragma: no cover
-                    self._cursor.rollback()
+                    if self._dialect.name == "postgres":
+                        query = query.split("VALUES")[0] + "VALUES %s"
+                        execute_values(self._cursor, query, chunk)
+                    else:
+                        self._cursor.execute(query, chunk)
+                except Exception:  # pragma: no cover
                     raise
                 progress.update(task_id, advance=actual_chunk_size)
