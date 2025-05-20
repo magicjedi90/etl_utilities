@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import List
 
 import numpy as np
@@ -19,7 +20,6 @@ class Loader:
 
     Two public upload helpers:
         • insert – INSERT INTO … VALUES (…), (…), …
-        • insert_union – INSERT INTO … SELECT … UNION ALL SELECT …
     """
 
     def __init__(
@@ -40,7 +40,7 @@ class Loader:
         self._column_string = ", ".join(self._dialect.escape(c) for c in df.columns)
         self._location = f"{self._schema}.{self._table}"
         self._placeholder = self._dialect.placeholder
-        self._max_rows_per_query = MAX_PARAM_PER_STATEMENT // len(df.columns)
+        self._max_rows_per_query = math.floor(MAX_PARAM_PER_STATEMENT // len(df.columns))
         if self._dialect.name == "mssql":
             self._cursor.fast_executemany = True
 
@@ -50,7 +50,6 @@ class Loader:
         their plain-python equivalents so DBAPIs do not choke.
         """
         df = self._df.replace({np.nan: None})
-        # keep the method short – any column-specific logic can be added here later
         placeholders = []
         for column in df.columns:
             series = df[column]
@@ -73,46 +72,18 @@ class Loader:
     def insert(self) -> None:
         df, placeholders = self._prepare_data()
         row_placeholder = f"({', '.join(placeholders)})"
-        insert_sql = f"INSERT INTO {self._location} ({self._column_string}) VALUES {{values}}"
+        insert_sql = f"INSERT INTO {self._location} ({self._column_string}) VALUES {row_placeholder}"
 
         rows: List[tuple] = [tuple(r) for r in df.itertuples(index=False, name=None)]
 
         self._run_progress(
             rows,
             batch_size=self._max_rows_per_query,
-            build_query=lambda chunk: insert_sql.format(
-                values=", ".join([row_placeholder] * len(chunk))
-            ),
-        )
-
-    # ―――― UNION ALL SELECT strategy ―――― #
-    def insert_union(self) -> None:
-        df, placeholders = self._prepare_data()
-        select_placeholder = ", ".join(placeholders)
-        select_fragment = f"SELECT {select_placeholder}"
-
-        insert_sql = f"INSERT INTO {self._location} ({self._column_string}) {{selects}}"
-
-        rows: List[tuple] = [tuple(r) for r in df.itertuples(index=False, name=None)]
-
-        # every UNION ALL adds a fixed number of params, keep within MAX_PARAM_PER_STATEMENT
-
-        self._run_progress(
-            rows,
-            batch_size=self._max_rows_per_query,
-            build_query=lambda chunk: insert_sql.format(
-                selects=" UNION ALL ".join([select_fragment] * len(chunk))
-            ),
+            build_query=insert_sql,
         )
 
     # ―――― generic executor with progress bar ―――― #
-    def _run_progress(
-            self,
-            rows: List[tuple],
-            *,
-            batch_size: int,
-            build_query,
-    ) -> None:
+    def _run_progress(self, rows: List[tuple], batch_size: int, build_query, ) -> None:
         """
         Execute query builder in chunks with a progress bar.
         build_query(chunk_rows) must return a ready SQL string.
@@ -129,7 +100,7 @@ class Loader:
             for i in range(0, total_rows, batch_size):
                 chunk = rows[i: i + batch_size]
 
-                if not chunk:  # Skip if chunk is empty
+                if not chunk:  # Skip if the chunk is empty
                     continue
 
                 actual_chunk_size = len(chunk)
@@ -141,7 +112,7 @@ class Loader:
                         query = query.split("VALUES")[0] + "VALUES %s"
                         execute_values(self._cursor, query, chunk)
                     else:
-                        self._cursor.execute(query, chunk)
+                        self._cursor.executemany(query, chunk)
                 except Exception:  # pragma: no cover
                     raise
                 progress.update(task_id, advance=actual_chunk_size)
