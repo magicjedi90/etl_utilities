@@ -11,7 +11,7 @@ from psycopg2.extras import execute_values
 from .sql_dialects import SqlDialect
 from .. import constants
 
-MAX_PARAM_PER_STATEMENT = 2000  # safe default for most engines
+MAX_PARAM_PER_STATEMENT = 100000  # safe default for most engines
 
 
 class Loader:
@@ -44,15 +44,14 @@ class Loader:
         if self._dialect.name == "mssql":
             self._cursor.fast_executemany = True
 
-    def _prepare_data(self) -> tuple[pd.DataFrame, list[str]]:
+    def _prepare_data(self) -> list[str]:
         """
         Replace NaNs with None and down-cast numpy scalar types to
         their plain-python equivalents so DBAPIs do not choke.
         """
-        df = self._df.replace({np.nan: None})
         placeholders = []
-        for column in df.columns:
-            series = df[column]
+        for column in self._df.columns:
+            series = self._df[column]
             series_type = series.dtype
             str_column = series.apply(str)
             max_size = str_column.str.len().max()
@@ -65,28 +64,28 @@ class Loader:
                 placeholders.append(self._placeholder)
             # switches from numpy class to python class for bool float and int
             if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
-                df[column] = series.tolist()
-        return df, placeholders
+                self._df[column] = series.tolist()
+        self._df = self._df.replace({np.nan: None})
+        return placeholders
 
     # ―――― INSERT (VALUES, VALUES, …) ―――― #
     def insert(self) -> None:
-        df, placeholders = self._prepare_data()
+        placeholders = self._prepare_data()
         row_placeholder = f"({', '.join(placeholders)})"
         insert_sql = f"INSERT INTO {self._location} ({self._column_string}) VALUES {row_placeholder}"
 
-        rows: List[tuple] = [tuple(r) for r in df.itertuples(index=False, name=None)]
+        rows: List[tuple] = [tuple(r) for r in self._df.itertuples(index=False, name=None)]
 
         self._run_progress(
             rows,
             batch_size=self._max_rows_per_query,
-            build_query=insert_sql,
+            query=insert_sql,
         )
 
     # ―――― generic executor with progress bar ―――― #
-    def _run_progress(self, rows: List[tuple], batch_size: int, build_query, ) -> None:
+    def _run_progress(self, rows: List[tuple], batch_size: int, query: str, ) -> None:
         """
-        Execute query builder in chunks with a progress bar.
-        build_query(chunk_rows) must return a ready SQL string.
+        Execute the query in chunks with a progress bar.
         """
         total_rows = len(rows)
         with Progress(
@@ -107,7 +106,6 @@ class Loader:
 
                 try:
                     # build_query is a function, expected to return a single SQL string for the chunk
-                    query = build_query(chunk)
                     if self._dialect.name == "postgres":
                         query = query.split("VALUES")[0] + "VALUES %s"
                         execute_values(self._cursor, query, chunk)

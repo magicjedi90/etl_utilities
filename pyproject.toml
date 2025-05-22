@@ -11,20 +11,21 @@ requires-python = ">=3.8"
 license = "MIT"
 keywords = ["etl", "pandas", "cleaning", "etl-utilities", "utilities", "database", "dataframe"]
 authors = [
-  { name = "Jesse", email = "magicjedi90@aim.com" },
+    { name = "Jesse", email = "magicjedi90@aim.com" },
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
-  "Programming Language :: Python",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = ["numpy", "pandas", "python_dateutil", "SQLAlchemy", "rich"]
+dependencies = ["numpy", "pandas", "python_dateutil", "SQLAlchemy", "rich", "psycopg2-binary"]
 
 [project.urls]
 Documentation = "https://github.com/magicjedi90/etl_utilities#readme"
@@ -38,7 +39,7 @@ path = "src/etl/__about__.py"
 packages = ["src/etl"]
 [tool.hatch.envs.types]
 extra-dependencies = [
-  "mypy>=1.0.0",
+    "mypy>=1.0.0",
 ]
 [tool.hatch.envs.types.scripts]
 check = "mypy --install-types --non-interactive {args:src/etl tests}"
@@ -48,7 +49,7 @@ source_pkgs = ["etl", "tests"]
 branch = true
 parallel = true
 omit = [
-  "src/etl/__about__.py",
+    "src/etl/__about__.py",
 ]
 
 [tool.coverage.paths]
@@ -57,7 +58,7 @@ tests = ["tests", "*/etl/tests"]
 
 [tool.coverage.report]
 exclude_lines = [
-  "no cov",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
+    "no cov",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
 ]
