@@ -38,7 +38,7 @@ class Connector:
         engine = create_engine(connection_string)
         return engine.connect().connection
 
-    def to_trusted_msql(self) ->  PoolProxiedConnection:
+    def to_trusted_mssql(self) ->  PoolProxiedConnection:
         return self.get_mssql_trusted_connection(self._host, self._instance, self._database)
 
     def to_user_mssql(self) ->  PoolProxiedConnection:
