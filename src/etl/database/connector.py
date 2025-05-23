@@ -41,7 +41,7 @@ class Connector:
     def to_trusted_msql(self) ->  PoolProxiedConnection:
         return self.get_mssql_trusted_connection(self._host, self._instance, self._database)
 
-    def to_user_msql(self) ->  PoolProxiedConnection:
+    def to_user_mssql(self) ->  PoolProxiedConnection:
         return self.get_mssql_user_connection(self._host, self._instance, self._database, self._username, self._password)
 
     def to_user_postgres(self) ->  PoolProxiedConnection:
