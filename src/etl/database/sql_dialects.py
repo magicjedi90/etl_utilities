@@ -16,6 +16,7 @@ class SqlDialect:
     primary_key_fragment_function: Callable[[str, str], str]
     unique_key_fragment_function: Callable[[str, str], str]
     placeholder: str
+    comment: str
 
     # Helper so Loader does not have to know quoting rules
     def escape(self, identifier: str) -> str:               # noqa: D401
@@ -41,7 +42,8 @@ mssql = SqlDialect(
     unique_key_fragment_function=lambda table, column: (
         f" constraint ak_{table}_{column} unique"
     ),
-    placeholder="?"
+    placeholder="?",
+    comment="--"
 )
 
 mariadb = SqlDialect(
@@ -60,7 +62,8 @@ mariadb = SqlDialect(
     unique_key_fragment_function=lambda table, column: (
         f"constraint ak_{table}_{column} unique ({column})"
     ),
-    placeholder="%s"
+    placeholder="%s",
+    comment="#"
 )
 
 
@@ -81,4 +84,5 @@ postgres = SqlDialect(
         f" constraint ak_{table}_{column} unique"
     ),
     placeholder="%s",
+    comment="--"
 )
