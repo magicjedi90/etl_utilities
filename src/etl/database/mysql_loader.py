@@ -1,5 +1,3 @@
-from warnings import deprecated
-
 from sqlalchemy.engine.interfaces import DBAPICursor
 from .loader import Loader
 from .. import constants
@@ -8,7 +6,6 @@ from ..logger import Logger
 logger = Logger().get_logger()
 
 
-@deprecated("This Class is deprecated. Use the unified_loader instead.",)
 class MySqlLoader(Loader):
     def __init__(self, cursor: DBAPICursor, df: pd.DataFrame, schema: str, table: str) -> None:
         super().__init__(cursor, df, schema, table)

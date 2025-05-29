@@ -1,5 +1,3 @@
-from warnings import deprecated
-
 from sqlalchemy.engine.interfaces import DBAPICursor
 
 from .loader import Loader
@@ -32,7 +30,6 @@ def prepare_data(df: pd.DataFrame, schema: str, table: str) -> tuple[pd.DataFram
     return df, column_string, location, placeholders
 
 
-@deprecated("This Class is deprecated. Use the unified_loader instead.",)
 class MsSqlLoader(Loader):
     def __init__(self, cursor: DBAPICursor, df: pd.DataFrame, schema: str, table: str) -> None:
         super().__init__(cursor, df, schema, table)

@@ -1,5 +1,3 @@
-from warnings import deprecated
-
 from sqlalchemy.engine.interfaces import DBAPICursor
 import numpy as np
 import pandas as pd
@@ -23,7 +21,6 @@ def insert_to_db(column_string: str, cursor: DBAPICursor, data_list: list, locat
         logger.error(data_list)
         raise e
 
-@deprecated("This Class is deprecated. Use the unified_loader instead.",)
 class Loader:
     def __init__(self, cursor: DBAPICursor, df: pd.DataFrame, schema: str, table: str):
         self._cursor = cursor
