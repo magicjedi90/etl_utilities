@@ -110,53 +110,72 @@ class PolarsCleaner:
     def clean_all_types(df: pl.DataFrame, columns: Optional[List[str]] = None) -> pl.DataFrame:
         """
         Perform comprehensive cleaning on all columns by trying different parsing functions.
-        Uses a single pass over the dataframe for efficiency.
+        Strategy:
+        - Build safe expressions for bool, number, and date that return None for incompatible values.
+        - Coalesce them in priority order, falling back to the original value to avoid data loss.
+        - Apply for all target columns in a single pass for efficiency.
         :param df: Polars DataFrame
         :param columns: List of columns to clean (if None, clean all columns)
         :return: DataFrame with all columns cleaned
         """
         if columns is None:
             columns = df.columns
-    
-        # Build all cleaning expressions at once
+
         cleaning_expressions = []
-        
+
         for column in columns:
-            # Skip if column is empty
+            # Skip if column has no non-null values
             if df.select(pl.col(column).drop_nulls()).height == 0:
-                logger.info(f'{column} is empty, skipping cleaning')
+                logger.info(f"{column} is empty, skipping cleaning")
                 cleaning_expressions.append(pl.col(column))
                 continue
-        
-            # Create a combined expression that tries each type in order
-            # We'll use when-then-otherwise chains to attempt each parsing
-            col_expr = pl.col(column)
-            
-            # Try to determine which cleaner to use by attempting each one
-            # The first one that succeeds (doesn't raise) wins
+
+            original = pl.col(column)
+            bool_expr = PolarsParser.parse_boolean_expr(column)
+            num_expr = PolarsParser.parse_integer_expr(column)
+            # Use fast vectorized date parsing for counting to avoid expensive/python fallback affecting selection
+            date_expr_count = PolarsParser.parse_date_expr_vectorized(column)
+            # But keep a tolerant, full date parser for final application if date wins
+            date_expr_full = PolarsParser.parse_date_expr(column)
+
+            # Evaluate non-null counts for each candidate expression
             try:
-                # Attempt boolean first
-                bool_expr = PolarsParser.parse_boolean_expr(column)
-                cleaning_expressions.append(bool_expr.alias(column))
-                logger.info(f'{column} will be cleaned as boolean')
-            except Exception:
-                try:
-                    # Attempt numeric
-                    num_expr = PolarsParser.parse_integer_expr(column)
-                    cleaning_expressions.append(num_expr.alias(column))
-                    logger.info(f'{column} will be cleaned as number')
-                except Exception:
-                    try:
-                        # Attempt date
-                        date_expr = PolarsParser.parse_date_expr(column)
-                        cleaning_expressions.append(date_expr.alias(column))
-                        logger.info(f'{column} will be cleaned as date')
-                    except Exception:
-                        # Keep as-is
-                        logger.debug(f'{column} will be kept as original type')
-                        cleaning_expressions.append(col_expr)
-    
-        # Apply all cleaning expressions in a single pass
+                counts = df.select([
+                    original.is_not_null().sum().alias("orig"),
+                    bool_expr.is_not_null().sum().alias("bool"),
+                    num_expr.is_not_null().sum().alias("num"),
+                    date_expr_count.is_not_null().sum().alias("date"),
+                ]).row(0)
+                original_count, bool_count, num_cnt, date_cnt = counts
+            except Exception as e:
+                logger.debug(f"Could not evaluate counts for {column}: {e}")
+                cleaning_expressions.append(original)
+                continue
+
+            # Choose the best parser among bool/num/date based on highest non-null count
+            # Tie-breaker priority: bool > num > date
+            candidates = [
+                (bool_count, 'bool'),
+                (num_cnt, 'num'),
+                (date_cnt, 'date'),
+            ]
+            # Sort by count desc, then by priority order as listed
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            top_count, top_kind = candidates[0]
+            # For now only convert if all elements are cleaned - potentially add in a threshold later
+            if top_count == original_count and top_count > 0:
+                if top_kind == 'bool':
+                    chosen = bool_expr
+                elif top_kind == 'num':
+                    chosen = num_expr
+                else:
+                    chosen = date_expr_full
+            else:
+                chosen = original
+
+            cleaning_expressions.append(chosen.alias(column))
+
+        # Apply all chosen expressions in a single pass
         df = df.with_columns(cleaning_expressions)
         return PolarsCleaner.optimize_dtypes(df)
 

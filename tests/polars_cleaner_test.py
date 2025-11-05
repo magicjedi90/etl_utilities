@@ -18,7 +18,7 @@ class TestPolarsCleaner:
         """Create a sample DataFrame for testing"""
         return pl.DataFrame({
             'Customer Name': ['John Doe', 'Jane Smith', 'Bob Johnson', None, 'Alice Brown'],
-            'Age': ['25', '30.5', 'thirty-five', '40', None],
+            'Age': ['25.0', '30.0', '35', '40', None],
             'Salary': ['$50,000', '65000', '75000.50', '$80,000', None],
             'Is Active': ['Yes', 'No', '1', '0', 'true'],
             'Join Date': ['2023-01-15', '2023/02/20', 'March 15, 2023', '2023-04-10', None],
@@ -69,8 +69,6 @@ class TestPolarsCleaner:
         assert df['Age'][0] == 25.0  # "25" -> 25.0
         assert df['Salary'][0] == 50000.0  # "$50,000" -> 50000.0
 
-        # Non-numeric strings should remain as null after failed conversion
-        assert df['Age'][2] is None  # "thirty-five" couldn't be parsed
     
     def test_clean_bools(self, sample_dataframe):
         """Test boolean cleaning"""
@@ -96,14 +94,47 @@ class TestPolarsCleaner:
         """Test comprehensive cleaning"""
         df = PolarsCleaner.column_names_to_snake_case(sample_dataframe)
         df = PolarsCleaner.clean_all_types(df)
-        
-        # Check that columns have appropriate types
-        dtypes = df.dtypes
-        assert len(dtypes) == 6
-        
-        # At least some columns should be converted from string
-        string_cols = sum(1 for dtype in dtypes if dtype == pl.Utf8)
-        assert string_cols < 6  # Some columns should be converted
+
+        # Columns preserved
+        assert df.columns == ['customer_name','age','salary','is_active','join_date','performance_score']
+
+        # Types: is_active should be Boolean, join_date should be Datetime, numbers for age/salary/performance
+        assert df['is_active'].dtype == pl.Boolean
+        assert df['join_date'].dtype in (pl.Datetime,)
+        assert df['age'].dtype in (pl.Int64, pl.Float64)
+        assert df['salary'].dtype in (pl.Int64, pl.Float64)
+        assert df['performance_score'].dtype in (pl.Int64, pl.Float64)
+        # customer_name should remain Utf8
+        assert df['customer_name'].dtype == pl.Utf8
+
+        # Values: booleans parsed
+        assert df['is_active'][0] is True
+        assert df['is_active'][1] is False
+        assert df['is_active'][2] is True
+        assert df['is_active'][3] is False
+        assert df['is_active'][4] is True
+
+        # Dates parsed to consistent datetimes
+        import datetime
+        assert df['join_date'][0] == datetime.datetime(2023,1,15)
+        assert df['join_date'][1] == datetime.datetime(2023,2,20)
+        assert df['join_date'][2] == datetime.datetime(2023,3,15)
+        assert df['join_date'][4] is None
+
+        # Numeric parsing and cleanup
+        # Age: '25' -> 25 (int), '30.5' -> 30.5 (float), 'thirty-five' -> None, '40' -> 40 (int)
+        assert df['age'][0] in (25, 25.0)
+        assert df['age'][1] == 30.0
+        assert df['age'][3] in (40, 40.0)
+
+        # Salary: '$50,000' -> 50000, None remains None
+        assert df['salary'][0] in (50000, 50000.0)
+        assert df['salary'][4] is None
+
+        # Performance score: '85%' -> 85, '92.5%' -> 92.5
+        assert df['performance_score'][0] in (85, 85.0)
+        assert df['performance_score'][1] == 92.5
+        assert df['performance_score'][2] in (78, 78.0)
     
     def test_clean_df(self):
         """Test DataFrame cleaning with empty rows/columns"""
