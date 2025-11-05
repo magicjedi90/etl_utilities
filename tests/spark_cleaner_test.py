@@ -3,7 +3,7 @@ import unittest
 from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
-from src.etl.spark.cleaner import Cleaner
+from src.etl.dataframe.spark.cleaner import SparkCleaner
 
 
 class TestCleaner(unittest.TestCase):
@@ -28,7 +28,7 @@ class TestCleaner(unittest.TestCase):
         ])
         df = self.create_dataframe(data, schema)
 
-        result_df = Cleaner.column_names_to_snake_case(df)
+        result_df = SparkCleaner.column_names_to_snake_case(df)
 
         self.assertEqual(set(result_df.columns), {"user_id", "user_name", "with_dollars_special_num_chars"})
 
@@ -46,7 +46,7 @@ class TestCleaner(unittest.TestCase):
         ])
         df = self.create_dataframe(data, schema)
 
-        result_df = Cleaner.clean_all_types(df)
+        result_df = SparkCleaner.clean_all_types(df)
 
         self.assertEqual(result_df.schema["boolean_col"].dataType.simpleString(), "boolean")
         self.assertEqual(result_df.schema["integer_col"].dataType.simpleString(), "int")
@@ -66,7 +66,7 @@ class TestCleaner(unittest.TestCase):
         ])
         df = self.create_dataframe(data, schema)
 
-        result_df = Cleaner.clean_df(df)
+        result_df = SparkCleaner.clean_df(df)
 
         self.assertEqual(result_df.count(), 2)
 
@@ -83,7 +83,7 @@ class TestCleaner(unittest.TestCase):
         ])
         df = self.create_dataframe(data, schema)
 
-        result_df = Cleaner.clean_df(df)
+        result_df = SparkCleaner.clean_df(df)
 
         self.assertNotIn("empty_col", result_df.columns)
         self.assertIn("text_col", result_df.columns)

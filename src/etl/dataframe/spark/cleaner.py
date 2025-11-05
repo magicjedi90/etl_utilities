@@ -1,7 +1,7 @@
 # src/etl/spark/cleaner.py
 
 import pyspark.sql.functions as functions
-from etl.dataframe.cleaner import standardize_column_name
+from src.etl.dataframe.cleaner import standardize_column_name
 from pyspark.sql import DataFrame
 
 from .udfs import (
@@ -10,7 +10,7 @@ from .udfs import (
 )
 
 
-class Cleaner:
+class SparkCleaner:
     @staticmethod
     def column_names_to_snake_case(df: DataFrame) -> DataFrame:
         """Converts DataFrame column names to snake_case for Spark."""
@@ -80,4 +80,4 @@ class Cleaner:
             cleaned_df = cleaned_df.drop(*cols_to_drop)
 
         # 3. Clean the types of the remaining columns
-        return Cleaner.clean_all_types(cleaned_df)
+        return SparkCleaner.clean_all_types(cleaned_df)
