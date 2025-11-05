@@ -12,7 +12,7 @@ class Parser:
         The function takes a value as an input and attempts to parse it as a boolean. If the value is `None`, it returns `None`. If the value is a case-insensitive match for any of the truthy values ('y', 'yes', 't', 'true', 'on', '1'), it returns `True`. If the value is a case-insensitive match for any of the falsy values ('n', 'no', 'f', 'false', 'off', '0'), it returns `False`. Otherwise, it raises a `ValueError` with an error message indicating the invalid truth value.
         """
         if pd.isnull(value):
-            return
+            return None
         value = str(value).lower()
         truthy_values = ('y', 'yes', 't', 'true', 'on', '1')
         falsy_values = ('n', 'no', 'f', 'false', 'off', '0')
@@ -31,7 +31,7 @@ class Parser:
         :return: The parsed float value.
         """
         if pd.isnull(value):
-            return
+            return None
         cleaned_value = str(value).replace(',', '').replace('$', '').replace('%', '')
         return float(cleaned_value)
 
@@ -43,7 +43,7 @@ class Parser:
         :return: The parsed date value.
         """
         if pd.isnull(value):
-            return
+            return None
         return parser.parse(str(value).strip())
 
     @staticmethod
@@ -55,8 +55,11 @@ class Parser:
         :raises ValueError: If the value is not a valid integer.
         """
         if pd.isnull(value):
-            return
-        if value == int(value):
-            return int(value)
+            return None
+        cleaned_value = str(value).replace(',', '').replace('$', '').replace('%', '')
+        float_value = float(cleaned_value)
+        int_value = int(float_value)
+        if float_value == int_value:
+            return int_value
         raise ValueError(f'Invalid integer value: {value}')
 
