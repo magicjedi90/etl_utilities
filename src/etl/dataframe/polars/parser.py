@@ -59,15 +59,21 @@ class PolarsParser:
         """
         Create a Polars expression for parsing float values.
         Returns an expression that cleans and converts strings to float.
+        Handles empty strings and whitespace by converting them to null before numeric conversion.
         """
-        # Normalize input to string, trim whitespace, and treat empty strings as nulls
+        # Normalize input to string and trim whitespace
         expr = pl.col(column).cast(pl.Utf8, strict=False)
         expr = expr.str.strip_chars()
-        expr = pl.when(expr == "").then(None).otherwise(expr)
+        
+        # Handle empty strings and whitespace by converting to null
+        is_null_or_empty = (expr.is_null() | (expr == ""))
+        
+        # Apply numeric cleanup patterns
         for pattern, replacement in PolarsParser.NUMERIC_CLEANUP_PATTERNS:
             expr = expr.str.replace_all(pattern, replacement)
 
-        return expr.cast(pl.Float64, strict=False)
+        # Convert to float, handling nulls and empty strings properly
+        return pl.when(is_null_or_empty).then(None).otherwise(expr.cast(pl.Float64, strict=False))
 
 
     @staticmethod
@@ -127,6 +133,7 @@ class PolarsParser:
         """
         Create a Polars expression for parsing integer values.
         First cleans the value as a float, then converts to integer if it's a whole number.
+        Handles empty strings and whitespace by converting them to null before numeric conversion.
         """
         # First, get the cleaned float value using parse_float_expr logic
         original = pl.col(column)
@@ -134,10 +141,16 @@ class PolarsParser:
         cleaned_utf8 = original.cast(pl.Utf8, strict=False)
         # Trim whitespace and treat empty strings as null so downstream numeric casts won't error
         cleaned_utf8 = cleaned_utf8.str.strip_chars()
-        cleaned_utf8 = pl.when(cleaned_utf8 == "").then(None).otherwise(cleaned_utf8)
+        
+        # Handle empty strings and whitespace by converting to null
+        is_null_or_empty = (cleaned_utf8.is_null() | (cleaned_utf8 == ""))
+        
+        # Apply numeric cleanup patterns
         for pattern, replacement in PolarsParser.NUMERIC_CLEANUP_PATTERNS:
             cleaned_utf8 = cleaned_utf8.str.replace_all(pattern, replacement)
-        cleaned_float = cleaned_utf8.cast(pl.Float64, strict=False)
+            
+        # Convert to float, handling nulls and empty strings properly
+        cleaned_float = pl.when(is_null_or_empty).then(None).otherwise(cleaned_utf8.cast(pl.Float64, strict=False))
 
         # Then check if it's a whole number and cast to integer if so
         return (pl.when(cleaned_float.is_null())
