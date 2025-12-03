@@ -194,6 +194,25 @@ class TestPolarsCleaner:
         # Empty rows should be removed
         assert cleaned_df.height <= df.height
     
+    def test_clean_numbers_with_empty_strings_after_cleanup(self):
+        """Test that empty strings after numeric cleanup are properly handled"""
+        df = pl.DataFrame({
+            'amount': ['$100', '', '  ', 'N/A', '1,000', '2,500.50', None]
+        })
+        
+        # Clean the numbers
+        cleaned = PolarsCleaner.clean_numbers(df, ['amount'])
+        
+        # Check types and values
+        assert cleaned['amount'].dtype in (pl.Int64, pl.Float64)
+        assert cleaned['amount'][0] in (100, 100.0)  # "$100" -> 100
+        assert cleaned['amount'][1] is None  # "" -> None
+        assert cleaned['amount'][2] is None  # "  " -> None
+        assert cleaned['amount'][3] is None  # "N/A" -> None (after cleanup becomes empty string)
+        assert cleaned['amount'][4] in (1000, 1000.0)  # "1,000" -> 1000
+        assert cleaned['amount'][5] == 2500.5  # "2,500.50" -> 2500.5
+        assert cleaned['amount'][6] is None  # None -> None
+
     def test_generate_hash_column(self, sample_dataframe):
         """Test hash column generation"""
         df = PolarsCleaner.generate_hash_column(

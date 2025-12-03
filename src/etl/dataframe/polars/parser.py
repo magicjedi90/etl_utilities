@@ -60,6 +60,7 @@ class PolarsParser:
         Create a Polars expression for parsing float values.
         Returns an expression that cleans and converts strings to float.
         Handles empty strings and whitespace by converting them to null before numeric conversion.
+        Also handles cases where numeric cleanup results in an empty string.
         """
         # Normalize input to string and trim whitespace
         expr = pl.col(column).cast(pl.Utf8, strict=False)
@@ -71,6 +72,9 @@ class PolarsParser:
         # Apply numeric cleanup patterns
         for pattern, replacement in PolarsParser.NUMERIC_CLEANUP_PATTERNS:
             expr = expr.str.replace_all(pattern, replacement)
+            
+        # After cleanup, check again for empty strings (e.g., "N/A" -> "" after cleanup)
+        is_null_or_empty = is_null_or_empty | (expr == "")
 
         # Convert to float, handling nulls and empty strings properly
         return pl.when(is_null_or_empty).then(None).otherwise(expr.cast(pl.Float64, strict=False))
@@ -134,6 +138,7 @@ class PolarsParser:
         Create a Polars expression for parsing integer values.
         First cleans the value as a float, then converts to integer if it's a whole number.
         Handles empty strings and whitespace by converting them to null before numeric conversion.
+        Also handles cases where numeric cleanup results in an empty string.
         """
         # First, get the cleaned float value using parse_float_expr logic
         original = pl.col(column)
@@ -148,6 +153,9 @@ class PolarsParser:
         # Apply numeric cleanup patterns
         for pattern, replacement in PolarsParser.NUMERIC_CLEANUP_PATTERNS:
             cleaned_utf8 = cleaned_utf8.str.replace_all(pattern, replacement)
+            
+        # After cleanup, check again for empty strings (e.g., "N/A" -> "" after cleanup)
+        is_null_or_empty = is_null_or_empty | (cleaned_utf8 == "")
             
         # Convert to float, handling nulls and empty strings properly
         cleaned_float = pl.when(is_null_or_empty).then(None).otherwise(cleaned_utf8.cast(pl.Float64, strict=False))
