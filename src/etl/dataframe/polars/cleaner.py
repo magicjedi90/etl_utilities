@@ -131,6 +131,17 @@ class PolarsCleaner:
                 continue
 
             original = pl.col(column)
+            # Treat empty or whitespace-only strings as nulls for the purpose of
+            # determining if a parser covers all meaningful values. This allows
+            # columns with empty strings to still be cast to their numeric/date/bool
+            # dtypes while preserving empties as nulls.
+            original_utf8 = original.cast(pl.Utf8, strict=False)
+            original_stripped = original_utf8.str.strip_chars()
+            effective_original = (
+                pl.when(original_stripped == "")
+                .then(None)
+                .otherwise(original)
+            )
             bool_expr = PolarsParser.parse_boolean_expr(column)
             num_expr = PolarsParser.parse_integer_expr(column)
             # Use fast vectorized date parsing for counting to avoid expensive/python fallback affecting selection
@@ -141,7 +152,7 @@ class PolarsCleaner:
             # Evaluate non-null counts for each candidate expression
             try:
                 counts = df.select([
-                    original.is_not_null().sum().alias("orig"),
+                    effective_original.is_not_null().sum().alias("orig"),
                     bool_expr.is_not_null().sum().alias("bool"),
                     num_expr.is_not_null().sum().alias("num"),
                     date_expr_count.is_not_null().sum().alias("date"),

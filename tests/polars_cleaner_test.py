@@ -19,7 +19,7 @@ class TestPolarsCleaner:
         return pl.DataFrame({
             'Customer Name': ['John Doe', 'Jane Smith', 'Bob Johnson', None, 'Alice Brown'],
             'Age': ['25.0', '30.0', '35', '40', None],
-            'Salary': ['$50,000', '65000', '75000.50', '$80,000', None],
+            'Salary': ['$50,000', '65000', '75000.50', '$80,000', ''],
             'Is Active': ['Yes', 'No', '1', '0', 'true'],
             'Join Date': ['2023-01-15', '2023/02/20', 'March 15, 2023', '2023-04-10', None],
             'Performance Score': ['85%', '92.5%', '78', '88.5%', None]
@@ -188,10 +188,10 @@ class TestPolarsCleaner:
     def test_optimize_dtypes(self):
         """Test data type optimization"""
         data = {
-            'small_int': [1, 2, 3] * 1000,
-            'medium_int': [1000, 2000, 3000] * 1000,
-            'large_int': [100000, 200000, 300000] * 1000,
-            'float_col': [1.5, 2.5, 3.5] * 1000
+            'small_int': [1, 2, 3, None] * 1000,
+            'medium_int': [1000, 2000, 3000, None] * 1000,
+            'large_int': [100000, 200000, 300000, None] * 1000,
+            'float_col': [1.5, 2.5, 3.5, None] * 1000
         }
         df = pl.DataFrame(data)
         
