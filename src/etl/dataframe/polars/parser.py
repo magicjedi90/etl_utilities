@@ -60,7 +60,10 @@ class PolarsParser:
         Create a Polars expression for parsing float values.
         Returns an expression that cleans and converts strings to float.
         """
+        # Normalize input to string, trim whitespace, and treat empty strings as nulls
         expr = pl.col(column).cast(pl.Utf8, strict=False)
+        expr = expr.str.strip_chars()
+        expr = pl.when(expr == "").then(None).otherwise(expr)
         for pattern, replacement in PolarsParser.NUMERIC_CLEANUP_PATTERNS:
             expr = expr.str.replace_all(pattern, replacement)
 
@@ -127,8 +130,11 @@ class PolarsParser:
         """
         # First, get the cleaned float value using parse_float_expr logic
         original = pl.col(column)
-        # Cast to Utf8 safely to allow string replacements even if the column is numeric
+        # Cast to Utf8 safely to allow string operations even if the column is numeric
         cleaned_utf8 = original.cast(pl.Utf8, strict=False)
+        # Trim whitespace and treat empty strings as null so downstream numeric casts won't error
+        cleaned_utf8 = cleaned_utf8.str.strip_chars()
+        cleaned_utf8 = pl.when(cleaned_utf8 == "").then(None).otherwise(cleaned_utf8)
         for pattern, replacement in PolarsParser.NUMERIC_CLEANUP_PATTERNS:
             cleaned_utf8 = cleaned_utf8.str.replace_all(pattern, replacement)
         cleaned_float = cleaned_utf8.cast(pl.Float64, strict=False)

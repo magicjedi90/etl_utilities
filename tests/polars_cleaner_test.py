@@ -18,7 +18,7 @@ class TestPolarsCleaner:
         """Create a sample DataFrame for testing"""
         return pl.DataFrame({
             'Customer Name': ['John Doe', 'Jane Smith', 'Bob Johnson', None, 'Alice Brown'],
-            'Age': ['25.0', '30.0', '35', '40', None],
+            'Age': ['25.0', '30.0', '35', '', None],
             'Salary': ['$50,000', '65000', '75000.50', '$80,000', ''],
             'Is Active': ['Yes', 'No', '1', '0', 'true'],
             'Join Date': ['2023-01-15', '2023/02/20', 'March 15, 2023', '2023-04-10', None],
@@ -125,7 +125,7 @@ class TestPolarsCleaner:
         # Age: '25' -> 25 (int), '30.5' -> 30.5 (float), 'thirty-five' -> None, '40' -> 40 (int)
         assert df['age'][0] in (25, 25.0)
         assert df['age'][1] == 30.0
-        assert df['age'][3] in (40, 40.0)
+        assert df['age'][3] is None
 
         # Salary: '$50,000' -> 50000, None remains None
         assert df['salary'][0] in (50000, 50000.0)
@@ -135,6 +135,48 @@ class TestPolarsCleaner:
         assert df['performance_score'][0] in (85, 85.0)
         assert df['performance_score'][1] == 92.5
         assert df['performance_score'][2] in (78, 78.0)
+
+    def test_numbers_with_empty_and_whitespace_strings(self):
+        """Ensure empty and whitespace-only strings do not cause Int64 cast errors and become nulls."""
+        df = pl.DataFrame({
+            'n1': ['123', '', '   ', None, '4,567'],
+            'n2': ['0', '  ', '\t', '', '$1,000']
+        })
+
+        # Should not raise and should parse numbers, with empties/whitespace -> null
+        cleaned = PolarsCleaner.clean_numbers(df, ['n1', 'n2'])
+
+        # Types should be numeric
+        assert cleaned['n1'].dtype in (pl.Int64, pl.Float64)
+        assert cleaned['n2'].dtype in (pl.Int64, pl.Float64)
+
+        # Values
+        assert cleaned['n1'][0] in (123, 123.0)
+        assert cleaned['n1'][1] is None  # '' -> None
+        assert cleaned['n1'][2] is None  # '   ' -> None
+        assert cleaned['n1'][3] is None  # None -> None
+        assert cleaned['n1'][4] in (4567, 4567.0)
+
+        assert cleaned['n2'][0] in (0, 0.0)
+        assert cleaned['n2'][1] is None
+        assert cleaned['n2'][2] is None
+        assert cleaned['n2'][3] is None
+        assert cleaned['n2'][4] in (1000, 1000.0)
+
+    def test_clean_all_types_with_empty_numeric_strings(self):
+        """clean_all_types should still choose numeric dtype when empties exist and keep them null."""
+        df = pl.DataFrame({
+            'age': ['25', '', '30', '   ', None],
+            'name': ['A', 'B', 'C', 'D', 'E']
+        })
+
+        cleaned = PolarsCleaner.clean_all_types(df)
+
+        assert cleaned['age'].dtype in (pl.Int64, pl.Float64)
+        assert cleaned['age'][0] in (25, 25.0)
+        assert cleaned['age'][1] is None
+        assert cleaned['age'][3] is None
+        assert cleaned['age'][4] is None
     
     def test_clean_df(self):
         """Test DataFrame cleaning with empty rows/columns"""
