@@ -37,14 +37,28 @@ class PolarsParser:
         """
         Create a Polars expression for parsing boolean values.
         Returns an expression that converts various truthy/falsy strings to boolean.
+        Handles empty strings and whitespace by converting them to null before boolean conversion.
         """
-        return pl.col(column).map_elements(PolarsParser.parse_bool_value, return_dtype=pl.Boolean)
+        # Normalize input: cast to Utf8 safely, handle nulls, strip whitespace
+        original = pl.col(column)
+        cleaned_utf8 = original.cast(pl.Utf8, strict=False)
+        cleaned_utf8 = cleaned_utf8.str.strip_chars()
+        
+        # Handle nulls and empty strings after stripping
+        is_null_or_empty = (cleaned_utf8.is_null() | (cleaned_utf8 == ""))
+        
+        # Apply boolean parsing with proper null handling
+        return pl.when(is_null_or_empty)\
+            .then(None)\
+            .otherwise(cleaned_utf8.map_elements(PolarsParser.parse_bool_value, return_dtype=pl.Boolean))
 
     @staticmethod
     def parse_bool_value(val: Any) -> Optional[bool]:
         if val is None:
             return None
-        val_lower = str(val).lower()
+        val_lower = str(val).strip().lower()
+        if val_lower == "":
+            return None
         if val_lower in PolarsParser.TRUTHY_VALUES:
             return True
         elif val_lower in PolarsParser.FALSY_VALUES:
