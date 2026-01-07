@@ -2,7 +2,7 @@
 
 from pyspark.sql.functions import udf
 from pyspark.sql.types import BooleanType, FloatType, StringType, TimestampType, IntegerType
-from src.etl.dataframe.parser import Parser
+from ..parser import Parser
 
 def is_boolean(value):
     try:

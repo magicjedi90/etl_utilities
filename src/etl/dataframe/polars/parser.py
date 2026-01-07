@@ -1,15 +1,20 @@
-import hashlib
-import re
+import logging
+import math
+from typing import Optional, Any
+
 import polars as pl
 from dateutil import parser
-from typing import Union, List, Optional, Callable, Any
-import logging
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 
 class PolarsParser:
+    """
+    Parser class with static methods for parsing different data types in Polars.
+    These methods are designed to work with Polars' expression system.
+    """
+
     TRUTHY_VALUES = ['y', 'yes', 't', 'true', 'on', '1']
     FALSY_VALUES = ['n', 'no', 'f', 'false', 'off', '0']
 
@@ -20,18 +25,6 @@ class PolarsParser:
         ('%', '')
     ]
 
-    @staticmethod
-    def _is_null_or_nan(value: Any) -> bool:
-        """
-        Check if a value is None or NaN.
-        :param value: The value to check
-        :return: True if value is None or NaN, False otherwise
-        """
-        return value is None or (isinstance(value, float) and str(value) == 'nan')
-    """
-    Parser class with static methods for parsing different data types in Polars.
-    These methods are designed to work with Polars' expression system.
-    """
     @staticmethod
     def parse_boolean_expr(column: str) -> pl.Expr:
         """
@@ -133,16 +126,17 @@ class PolarsParser:
     @staticmethod
     def parse_date(value: Any) -> Optional[Any]:
         """
-        This function is used to parse a date value.
+        Parse a date value using dateutil.
         :param value: The value to be parsed as a date.
-        :return: The parsed date value.
+        :return: The parsed date value, or None if parsing fails.
         """
-        if value is None or (isinstance(value, float) and str(value) == 'nan'):
+        if value is None:
+            return None
+        if isinstance(value, float) and math.isnan(value):
             return None
         try:
             return parser.parse(str(value).strip())
         except Exception:
-            # Return None when parsing fails to avoid raising during vectorized operations
             return None
 
 

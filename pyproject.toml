@@ -25,7 +25,17 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = ["numpy", "pandas", "polars", "python_dateutil", "SQLAlchemy", "rich", "psycopg2-binary", "pyspark"]
+dependencies = [
+    "numpy",
+    "pandas",
+    "polars",
+    "python_dateutil",
+    "SQLAlchemy",
+    "rich",
+    "psycopg2-binary",
+    "pyspark",
+    "pytest>=8.3.5",
+]
 
 [project.urls]
 Documentation = "https://github.com/magicjedi90/etl_utilities#readme"

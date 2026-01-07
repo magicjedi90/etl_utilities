@@ -1,8 +1,7 @@
-import hashlib
-import re
-import polars as pl
-from typing import Union, List, Optional, Callable, Any
 import logging
+from typing import List, Optional
+
+import polars as pl
 
 from .parser import PolarsParser
 from ..cleaner import standardize_column_name, compute_hash
@@ -257,26 +256,49 @@ class PolarsCleaner:
         :param df: Polars DataFrame
         :return: DataFrame with optimized data types
         """
-        # Convert integer columns to smallest possible type
-        for col in df.columns:
-            if df[col].dtype == pl.Int64:
-                max_val = df[col].max()
-                min_val = df[col].min()
-                if min_val is not None and max_val is not None:
-                    if min_val >= 0:
-                        if max_val < 255:
-                            df = df.with_columns(pl.col(col).cast(pl.UInt8))
-                        elif max_val < 65535:
-                            df = df.with_columns(pl.col(col).cast(pl.UInt16))
-                        elif max_val < 4294967295:
-                            df = df.with_columns(pl.col(col).cast(pl.UInt32))
-                    else:
-                        if min_val >= -128 and max_val < 127:
-                            df = df.with_columns(pl.col(col).cast(pl.Int8))
-                        elif min_val >= -32768 and max_val < 32767:
-                            df = df.with_columns(pl.col(col).cast(pl.Int16))
-                        elif min_val >= -2147483648 and max_val < 2147483647:
-                            df = df.with_columns(pl.col(col).cast(pl.Int32))
-        
+        int_cols = [col for col in df.columns if df[col].dtype == pl.Int64]
+        if not int_cols:
+            return df
+
+        # Compute min/max for all integer columns in a single pass
+        agg_exprs = []
+        for col in int_cols:
+            agg_exprs.extend([
+                pl.col(col).min().alias(f"{col}__min"),
+                pl.col(col).max().alias(f"{col}__max"),
+            ])
+        stats = df.select(agg_exprs).row(0, named=True)
+
+        # Build cast expressions for columns that can be optimized
+        cast_exprs = []
+        for col in int_cols:
+            min_val = stats[f"{col}__min"]
+            max_val = stats[f"{col}__max"]
+
+            if min_val is None or max_val is None:
+                continue
+
+            target_dtype = None
+            if min_val >= 0:
+                if max_val <= 255:
+                    target_dtype = pl.UInt8
+                elif max_val <= 65535:
+                    target_dtype = pl.UInt16
+                elif max_val <= 4294967295:
+                    target_dtype = pl.UInt32
+            else:
+                if min_val >= -128 and max_val <= 127:
+                    target_dtype = pl.Int8
+                elif min_val >= -32768 and max_val <= 32767:
+                    target_dtype = pl.Int16
+                elif min_val >= -2147483648 and max_val <= 2147483647:
+                    target_dtype = pl.Int32
+
+            if target_dtype is not None:
+                cast_exprs.append(pl.col(col).cast(target_dtype))
+
+        if cast_exprs:
+            df = df.with_columns(cast_exprs)
+
         return df
     
