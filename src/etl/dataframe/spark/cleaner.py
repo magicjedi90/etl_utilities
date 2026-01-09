@@ -130,15 +130,27 @@ def parse_float(column: Column) -> Column:
     )
 
 
-def _try_parse_date(column: Column) -> Column:
-    """Try parsing date with multiple formats, returning first successful parse."""
+def _try_parse_date(column: Column, source_timezone: str = "UTC") -> Column:
+    """Try parsing date with multiple formats, returning first successful parse.
+
+    All parsed timestamps are converted to UTC for consistent timezone handling.
+
+    Args:
+        column: The column to parse
+        source_timezone: The timezone to assume for timezone-naive datetime strings.
+                        Defaults to "UTC". For timezone-aware strings (with offset),
+                        the offset is respected and this parameter is ignored.
+    """
     parsed_result = spark_functions.lit(None).cast(TimestampType())
     for date_format in reversed(DATE_FORMATS):
         parsed_result = spark_functions.coalesce(
             spark_functions.try_to_timestamp(column, spark_functions.lit(date_format)),
             parsed_result
         )
-    return parsed_result
+    # Convert to UTC to ensure consistent timezone handling across all timestamps
+    # For timezone-aware inputs, this normalizes to UTC
+    # For timezone-naive inputs, assumes they are in source_timezone and converts to UTC
+    return spark_functions.to_utc_timestamp(parsed_result, source_timezone)
 
 
 def is_date(column: Column) -> Column:
@@ -152,12 +164,21 @@ def is_date(column: Column) -> Column:
     )
 
 
-def parse_date(column: Column) -> Column:
-    """Native Spark SQL date/timestamp parser."""
+def parse_date(column: Column, source_timezone: str = "UTC") -> Column:
+    """Native Spark SQL date/timestamp parser.
+
+    All parsed timestamps are normalized to UTC for consistent serialization.
+
+    Args:
+        column: The column to parse
+        source_timezone: The timezone to assume for timezone-naive datetime strings.
+                        Defaults to "UTC". For timezone-aware strings (with offset),
+                        the offset is respected and this parameter is ignored.
+    """
     return spark_functions.when(
         _is_null_or_empty(column), spark_functions.lit(None).cast(TimestampType())
     ).otherwise(
-        _try_parse_date(spark_functions.trim(column))
+        _try_parse_date(spark_functions.trim(column), source_timezone)
     )
 
 
@@ -173,18 +194,29 @@ class SparkCleaner:
         return result_dataframe
 
     @staticmethod
-    def clean_all_types(dataframe: DataFrame) -> DataFrame:
+    def clean_all_types(dataframe: DataFrame, source_timezone: str = "UTC") -> DataFrame:
         """
         Cleans and casts all columns in a Spark DataFrame to their most appropriate type.
 
         Only casts a column if ALL non-null values can be successfully parsed.
         Uses native Spark SQL operations for optimal performance (no Python UDFs).
+        All datetime columns are normalized to UTC for consistent serialization.
+
+        Args:
+            dataframe: The DataFrame to clean
+            source_timezone: The timezone to assume for timezone-naive datetime strings.
+                           Defaults to "UTC". Timezone-aware strings are handled correctly
+                           regardless of this setting.
         """
+        # Create a date parser that uses the specified source timezone
+        def parse_date_with_tz(column: Column) -> Column:
+            return parse_date(column, source_timezone)
+
         type_checks = [
             {'name': 'boolean', 'checker': is_boolean, 'parser': parse_boolean},
             {'name': 'integer', 'checker': is_integer, 'parser': parse_integer},
             {'name': 'float', 'checker': is_float, 'parser': parse_float},
-            {'name': 'datetime', 'checker': is_date, 'parser': parse_date},
+            {'name': 'datetime', 'checker': is_date, 'parser': parse_date_with_tz},
         ]
 
         # Cache the DataFrame to avoid recomputation
@@ -250,9 +282,17 @@ class SparkCleaner:
         return cleaned_dataframe
 
     @staticmethod
-    def clean_df(dataframe: DataFrame) -> DataFrame:
+    def clean_df(dataframe: DataFrame, source_timezone: str = "UTC") -> DataFrame:
         """
         Drops fully empty rows and columns, then cleans the remaining data.
+
+        All datetime columns are normalized to UTC for consistent serialization.
+
+        Args:
+            dataframe: The DataFrame to clean
+            source_timezone: The timezone to assume for timezone-naive datetime strings.
+                           Defaults to "UTC". Timezone-aware strings are handled correctly
+                           regardless of this setting.
         """
         # 1. Drop rows where all values are null
         cleaned_dataframe = dataframe.na.drop(how='all')
@@ -277,4 +317,4 @@ class SparkCleaner:
             cleaned_dataframe = cleaned_dataframe.drop(*columns_to_drop)
 
         # 3. Clean the types of the remaining columns
-        return SparkCleaner.clean_all_types(cleaned_dataframe)
+        return SparkCleaner.clean_all_types(cleaned_dataframe, source_timezone)
