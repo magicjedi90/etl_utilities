@@ -5,7 +5,7 @@ from typing import Optional
 
 from pyspark.sql import functions as spark_functions
 from pyspark.sql import Column, DataFrame
-from pyspark.sql.types import BooleanType, IntegerType, FloatType, TimestampType
+from pyspark.sql.types import BooleanType, LongType, FloatType, TimestampType
 
 from ..cleaner import standardize_column_name
 
@@ -97,13 +97,13 @@ def is_integer(column: Column) -> Column:
 
 
 def parse_integer(column: Column) -> Column:
-    """Native Spark SQL integer parser."""
+    """Native Spark SQL integer parser using LongType (64-bit) for large values."""
     cleaned_value = _clean_numeric_string(spark_functions.trim(column))
     # Cast through double first to handle strings like "100.00"
     return spark_functions.when(
-        _is_null_or_empty(column), spark_functions.lit(None).cast(IntegerType())
+        _is_null_or_empty(column), spark_functions.lit(None).cast(LongType())
     ).otherwise(
-        cleaned_value.cast('double').cast(IntegerType())
+        cleaned_value.cast('double').cast(LongType())
     )
 
 

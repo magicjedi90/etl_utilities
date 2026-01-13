@@ -179,7 +179,7 @@ class TestSparkCleaner(unittest.TestCase):
         self.assert_cleaned_values(
             "int_col",
             ["123", "456", "789", "0", "-100"],
-            "int",
+            "bigint",
             [123, 456, 789, 0, -100]
         )
 
@@ -188,7 +188,7 @@ class TestSparkCleaner(unittest.TestCase):
         self.assert_cleaned_values(
             "int_col",
             ["$1,000", "%200", "3,000,000", "$5"],
-            "int",
+            "bigint",
             [1000, 200, 3000000, 5]
         )
 
@@ -197,7 +197,7 @@ class TestSparkCleaner(unittest.TestCase):
         self.assert_cleaned_values(
             "int_col",
             ["100.00", "200.0", "300.000"],
-            "int",
+            "bigint",
             [100, 200, 300]
         )
 
@@ -206,7 +206,7 @@ class TestSparkCleaner(unittest.TestCase):
         self.assert_cleaned_values(
             "int_col",
             ["100", None, "200", None],
-            "int",
+            "bigint",
             [100, None, 200, None]
         )
 
@@ -294,7 +294,7 @@ class TestSparkCleaner(unittest.TestCase):
         self.assert_cleaned_values(
             "int_col",
             ["100", "", "200", "   ", None],
-            "int",
+            "bigint",
             [100, None, 200, None, None]
         )
 
@@ -352,7 +352,7 @@ class TestSparkCleaner(unittest.TestCase):
 
         expected_types = {
             "boolean_col": "boolean",
-            "integer_col": "int",
+            "integer_col": "bigint",
             "float_col": "float",
             "date_col": "timestamp",
             "string_col": "string"
@@ -461,13 +461,13 @@ class TestSparkCleaner(unittest.TestCase):
 
         result = SparkCleaner.clean_all_types(dataframe)
 
-        expected_types = {"bool_col": "boolean", "int_col": "int", "float_col": "float", "date_col": "timestamp"}
+        expected_types = {"bool_col": "boolean", "int_col": "bigint", "float_col": "float", "date_col": "timestamp"}
         for column_name, expected_type in expected_types.items():
             self.assertEqual(result.schema[column_name].dataType.simpleString(), expected_type)
 
     def test_single_column_dataframe(self):
         """Test handling of single column DataFrame"""
-        self.assert_column_type("value", ["100", "200", "300"], "int")
+        self.assert_column_type("value", ["100", "200", "300"], "bigint")
 
     def test_all_null_column_in_clean_all_types(self):
         """Test that all-null columns are skipped in clean_all_types"""
@@ -480,7 +480,7 @@ class TestSparkCleaner(unittest.TestCase):
 
         result = SparkCleaner.clean_all_types(dataframe)
 
-        self.assertEqual(result.schema["int_col"].dataType.simpleString(), "int")
+        self.assertEqual(result.schema["int_col"].dataType.simpleString(), "bigint")
         self.assertEqual(result.schema["null_col"].dataType.simpleString(), "string")
 
     def test_whitespace_only_values(self):
@@ -498,16 +498,25 @@ class TestSparkCleaner(unittest.TestCase):
 
         result = SparkCleaner.clean_all_types(dataframe)
 
-        self.assertEqual(result.schema["int_col"].dataType.simpleString(), "int")
-        self.assertEqual(result.schema["string_col"].dataType.simpleString(), "int")
+        self.assertEqual(result.schema["int_col"].dataType.simpleString(), "bigint")
+        self.assertEqual(result.schema["string_col"].dataType.simpleString(), "bigint")
 
     def test_large_numbers(self):
         """Test handling of large numbers"""
         self.assert_cleaned_values(
             "large_int",
             ["1000000000", "2000000000", "999999999"],
-            "int",
+            "bigint",
             [1000000000, 2000000000, 999999999]
+        )
+
+    def test_trillion_scale_numbers(self):
+        """Test handling of trillion-scale numbers that exceed 32-bit int range"""
+        self.assert_cleaned_values(
+            "huge_int",
+            ["2300000000000", "9000000000000", "100000000000"],
+            "bigint",
+            [2300000000000, 9000000000000, 100000000000]
         )
 
     def test_negative_numbers(self):
