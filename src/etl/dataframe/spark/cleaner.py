@@ -1,15 +1,36 @@
 # src/etl/spark/cleaner.py
 
+import dataclasses
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 from pyspark.sql import functions as spark_functions
 from pyspark.sql import Column, DataFrame
-from pyspark.sql.types import BooleanType, LongType, FloatType, TimestampType
+from pyspark.sql.types import BooleanType, LongType, FloatType, TimestampType, StringType
 
 from ..cleaner import standardize_column_name
 
 logger = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass(slots=True, frozen=True)
+class SamplingConfig:
+    """Configuration for sampling-based type inference."""
+    enabled: bool = True
+    fraction: float = 0.1          # 10% sample
+    min_rows: int = 1000           # Skip sampling if fewer rows
+    max_rows: int = 100_000        # Cap sample size
+    seed: int | None = None        # For reproducibility
+
+
+# Type fallback hierarchy for retry logic when sampled type fails on full data
+TYPE_FALLBACK_HIERARCHY: dict[str, list[str]] = {
+    'boolean': ['integer', 'float', 'string'],
+    'integer': ['float', 'string'],
+    'float': ['string'],
+    'datetime': ['string'],
+    'string': [],
+}
 
 # Boolean truthy/falsy values (lowercase)
 TRUTHY_VALUES = ('y', 'yes', 't', 'true', 'on', '1')
@@ -194,39 +215,46 @@ class SparkCleaner:
         return result_dataframe
 
     @staticmethod
-    def clean_all_types(dataframe: DataFrame, source_timezone: str = "UTC") -> DataFrame:
-        """
-        Cleans and casts all columns in a Spark DataFrame to their most appropriate type.
-
-        Only casts a column if ALL non-null values can be successfully parsed.
-        Uses native Spark SQL operations for optimal performance (no Python UDFs).
-        All datetime columns are normalized to UTC for consistent serialization.
-
-        Args:
-            dataframe: The DataFrame to clean
-            source_timezone: The timezone to assume for timezone-naive datetime strings.
-                           Defaults to "UTC". Timezone-aware strings are handled correctly
-                           regardless of this setting.
-        """
-        # Create a date parser that uses the specified source timezone
+    def _get_type_checks(source_timezone: str) -> list[dict]:
+        """Get the type check definitions with timezone-aware date parser."""
         def parse_date_with_tz(column: Column) -> Column:
             return parse_date(column, source_timezone)
 
-        type_checks = [
+        return [
             {'name': 'boolean', 'checker': is_boolean, 'parser': parse_boolean},
             {'name': 'integer', 'checker': is_integer, 'parser': parse_integer},
             {'name': 'float', 'checker': is_float, 'parser': parse_float},
             {'name': 'datetime', 'checker': is_date, 'parser': parse_date_with_tz},
         ]
 
-        # Cache the DataFrame to avoid recomputation
-        cached_dataframe = dataframe.cache()
+    @staticmethod
+    def _get_sample(dataframe: DataFrame, config: SamplingConfig, total_rows: int) -> DataFrame | None:
+        """Get a representative sample of the DataFrame.
 
+        Returns None if sampling should be skipped (dataset too small or disabled).
+        """
+        if not config.enabled or total_rows < config.min_rows:
+            return None
+
+        # Calculate effective fraction to cap at max_rows
+        effective_fraction = min(config.fraction, config.max_rows / total_rows)
+
+        return dataframe.sample(withReplacement=False, fraction=effective_fraction, seed=config.seed)
+
+    @staticmethod
+    def _infer_types_from_dataframe(
+        dataframe: DataFrame,
+        type_checks: list[dict],
+    ) -> dict[str, Optional[dict]]:
+        """Infer best type for each column using single-pass aggregation.
+
+        Returns a dict mapping column name to the chosen type_check dict (or None).
+        """
         # Build aggregation expressions to compute all stats in a single pass
         aggregation_expressions = []
-        for column_name in cached_dataframe.columns:
+        for column_name in dataframe.columns:
             column_ref = spark_functions.col(column_name)
-            # Count non-null values
+            # Count non-null values (type checkers handle empty strings as "matching any type")
             aggregation_expressions.append(
                 spark_functions.sum(
                     spark_functions.when(column_ref.isNotNull(), 1).otherwise(0)
@@ -241,11 +269,11 @@ class SparkCleaner:
                 )
 
         # Execute single aggregation to get all statistics
-        statistics_row = cached_dataframe.agg(*aggregation_expressions).first()
+        statistics_row = dataframe.agg(*aggregation_expressions).first()
 
         # Determine best type for each column based on collected stats
         column_type_mapping: dict[str, Optional[dict]] = {}
-        for column_name in cached_dataframe.columns:
+        for column_name in dataframe.columns:
             non_null_count = statistics_row[f"{column_name}__non_null"]
 
             if non_null_count == 0:
@@ -263,14 +291,176 @@ class SparkCleaner:
 
             column_type_mapping[column_name] = chosen_type
 
-        # Apply transformations using native Spark SQL functions
+        return column_type_mapping
+
+    @staticmethod
+    def _detect_conversion_failures(
+        original_df: DataFrame,
+        converted_df: DataFrame,
+        column_name: str,
+    ) -> int:
+        """Count values that became null after conversion (excluding empty strings).
+
+        Returns the number of values that were non-null/non-empty before but null after.
+        """
+        # Count non-null, non-empty in original
+        original_non_null = original_df.select(
+            spark_functions.sum(
+                spark_functions.when(
+                    spark_functions.col(column_name).isNotNull() &
+                    (spark_functions.trim(spark_functions.col(column_name).cast(StringType())) != ''),
+                    1
+                ).otherwise(0)
+            )
+        ).first()[0] or 0
+
+        # Count non-null in converted
+        converted_non_null = converted_df.select(
+            spark_functions.sum(
+                spark_functions.when(spark_functions.col(column_name).isNotNull(), 1).otherwise(0)
+            )
+        ).first()[0] or 0
+
+        # Failures are values that were valid but became null
+        return original_non_null - converted_non_null
+
+    @staticmethod
+    def _get_parser_for_type(type_name: str, type_checks: list[dict]) -> Callable[[Column], Column] | None:
+        """Get the parser function for a given type name."""
+        if type_name == 'string':
+            return None  # No parser needed for string
+        for type_check in type_checks:
+            if type_check['name'] == type_name:
+                return type_check['parser']
+        return None
+
+    @staticmethod
+    def _apply_type_with_retry(
+        dataframe: DataFrame,
+        column_name: str,
+        inferred_type: str,
+        type_checks: list[dict],
+    ) -> tuple[DataFrame, str]:
+        """Apply type conversion with automatic fallback on failure.
+
+        Returns (converted_dataframe, final_type_name).
+        """
+        current_type = inferred_type
+        fallback_types = TYPE_FALLBACK_HIERARCHY.get(current_type, [])
+
+        # Try the inferred type first
+        parser = SparkCleaner._get_parser_for_type(current_type, type_checks)
+        if parser is None:
+            # String type or unknown - no conversion needed
+            return dataframe, 'string'
+
+        converted_df = dataframe.withColumn(
+            column_name, parser(spark_functions.col(column_name))
+        )
+
+        # Check for conversion failures
+        failures = SparkCleaner._detect_conversion_failures(dataframe, converted_df, column_name)
+
+        if failures == 0:
+            logger.info(f"Casting column '{column_name}' to {current_type}.")
+            return converted_df, current_type
+
+        # Try fallback types
+        for fallback_type in fallback_types:
+            logger.warning(
+                f"Column '{column_name}': {failures} values failed conversion to {current_type}, "
+                f"trying fallback to {fallback_type}."
+            )
+
+            if fallback_type == 'string':
+                # String fallback - no conversion needed, return original
+                logger.warning(f"Column '{column_name}' kept as string (fallback from {current_type}).")
+                return dataframe, 'string'
+
+            parser = SparkCleaner._get_parser_for_type(fallback_type, type_checks)
+            if parser is None:
+                continue
+
+            converted_df = dataframe.withColumn(
+                column_name, parser(spark_functions.col(column_name))
+            )
+
+            failures = SparkCleaner._detect_conversion_failures(dataframe, converted_df, column_name)
+
+            if failures == 0:
+                logger.info(f"Casting column '{column_name}' to {fallback_type} (fallback from {inferred_type}).")
+                return converted_df, fallback_type
+
+            current_type = fallback_type
+
+        # All fallbacks failed, keep as string
+        logger.warning(f"Column '{column_name}' kept as string (all type conversions failed).")
+        return dataframe, 'string'
+
+    @staticmethod
+    def clean_all_types(
+        dataframe: DataFrame,
+        source_timezone: str = "UTC",
+        sampling_config: SamplingConfig | None = None,
+    ) -> DataFrame:
+        """
+        Cleans and casts all columns in a Spark DataFrame to their most appropriate type.
+
+        When sampling is enabled, types are inferred from a sample and then validated
+        against the full data. If validation fails, the type is automatically broadened
+        using the fallback hierarchy (e.g., integer -> float -> string).
+
+        Uses native Spark SQL operations for optimal performance (no Python UDFs).
+        All datetime columns are normalized to UTC for consistent serialization.
+
+        Args:
+            dataframe: The DataFrame to clean
+            source_timezone: The timezone to assume for timezone-naive datetime strings.
+                           Defaults to "UTC". Timezone-aware strings are handled correctly
+                           regardless of this setting.
+            sampling_config: Configuration for sampling-based type inference.
+                           Defaults to SamplingConfig() which enables sampling.
+                           Pass SamplingConfig(enabled=False) to disable sampling.
+        """
+        if sampling_config is None:
+            sampling_config = SamplingConfig()
+
+        type_checks = SparkCleaner._get_type_checks(source_timezone)
+
+        # Cache the original DataFrame - we'll need it for retry logic
+        cached_dataframe = dataframe.cache()
+        total_rows = cached_dataframe.count()
+
+        # Get sample or use full data
+        sample_df = SparkCleaner._get_sample(cached_dataframe, sampling_config, total_rows)
+        use_sampling = sample_df is not None
+
+        if use_sampling:
+            logger.info(f"Using sampling for type inference (config: fraction={sampling_config.fraction}, "
+                       f"min_rows={sampling_config.min_rows}, max_rows={sampling_config.max_rows})")
+            # Cache sample for efficient reuse
+            sample_df = sample_df.cache()
+            column_type_mapping = SparkCleaner._infer_types_from_dataframe(sample_df, type_checks)
+            sample_df.unpersist()
+        else:
+            if sampling_config.enabled:
+                logger.info(f"Skipping sampling (total_rows={total_rows} < min_rows={sampling_config.min_rows})")
+            column_type_mapping = SparkCleaner._infer_types_from_dataframe(cached_dataframe, type_checks)
+
+        # Apply transformations with retry logic if sampling was used
         cleaned_dataframe = cached_dataframe
         for column_name, chosen_type in column_type_mapping.items():
             if chosen_type is None:
-                non_null_count = statistics_row[f"{column_name}__non_null"]
-                if non_null_count > 0:
-                    logger.debug(f"Column '{column_name}' kept as original type (no full type match).")
+                logger.debug(f"Column '{column_name}' kept as original type (no type match).")
+                continue
+
+            if use_sampling:
+                # Use retry logic when sampling was used
+                cleaned_dataframe, final_type = SparkCleaner._apply_type_with_retry(
+                    cleaned_dataframe, column_name, chosen_type['name'], type_checks
+                )
             else:
+                # Direct conversion when full data was used for inference
                 logger.info(f"Casting column '{column_name}' to {chosen_type['name']}.")
                 cleaned_dataframe = cleaned_dataframe.withColumn(
                     column_name, chosen_type['parser'](spark_functions.col(column_name))
@@ -282,7 +472,11 @@ class SparkCleaner:
         return cleaned_dataframe
 
     @staticmethod
-    def clean_df(dataframe: DataFrame, source_timezone: str = "UTC") -> DataFrame:
+    def clean_df(
+        dataframe: DataFrame,
+        source_timezone: str = "UTC",
+        sampling_config: SamplingConfig | None = None,
+    ) -> DataFrame:
         """
         Drops fully empty rows and columns, then cleans the remaining data.
 
@@ -293,6 +487,9 @@ class SparkCleaner:
             source_timezone: The timezone to assume for timezone-naive datetime strings.
                            Defaults to "UTC". Timezone-aware strings are handled correctly
                            regardless of this setting.
+            sampling_config: Configuration for sampling-based type inference.
+                           Defaults to SamplingConfig() which enables sampling.
+                           Pass SamplingConfig(enabled=False) to disable sampling.
         """
         # 1. Drop rows where all values are null
         cleaned_dataframe = dataframe.na.drop(how='all')
@@ -317,4 +514,4 @@ class SparkCleaner:
             cleaned_dataframe = cleaned_dataframe.drop(*columns_to_drop)
 
         # 3. Clean the types of the remaining columns
-        return SparkCleaner.clean_all_types(cleaned_dataframe, source_timezone)
+        return SparkCleaner.clean_all_types(cleaned_dataframe, source_timezone, sampling_config)

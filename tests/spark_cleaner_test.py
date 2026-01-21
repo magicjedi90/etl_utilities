@@ -9,7 +9,7 @@ from typing import Any
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
-from src.etl.dataframe.spark.cleaner import SparkCleaner
+from src.etl.dataframe.spark.cleaner import SparkCleaner, SamplingConfig
 
 
 class TestSparkCleaner(unittest.TestCase):
@@ -522,6 +522,189 @@ class TestSparkCleaner(unittest.TestCase):
     def test_negative_numbers(self):
         """Test handling of negative numbers"""
         self.assert_column_type("negative", ["-100", "-200.5", "-0.001"], "float")
+
+    # =========================================================================
+    # Sampling Configuration Tests
+    # =========================================================================
+
+    def test_sampling_config_defaults(self):
+        """Test that SamplingConfig has sensible defaults"""
+        config = SamplingConfig()
+        self.assertTrue(config.enabled)
+        self.assertEqual(config.fraction, 0.1)
+        self.assertEqual(config.min_rows, 1000)
+        self.assertEqual(config.max_rows, 100_000)
+        self.assertIsNone(config.seed)
+
+    def test_sampling_config_custom_values(self):
+        """Test SamplingConfig with custom values"""
+        config = SamplingConfig(
+            enabled=False,
+            fraction=0.5,
+            min_rows=500,
+            max_rows=50_000,
+            seed=42
+        )
+        self.assertFalse(config.enabled)
+        self.assertEqual(config.fraction, 0.5)
+        self.assertEqual(config.min_rows, 500)
+        self.assertEqual(config.max_rows, 50_000)
+        self.assertEqual(config.seed, 42)
+
+    def test_sampling_skipped_for_small_dataframe(self):
+        """Test that sampling is skipped when DataFrame has fewer rows than min_rows"""
+        # Create a small DataFrame (less than default min_rows of 1000)
+        data = [(str(i),) for i in range(100)]
+        schema = StructType([StructField("int_col", StringType(), True)])
+        dataframe = self.spark.createDataFrame(data, schema)
+
+        # With sampling enabled but small dataset, should still work correctly
+        config = SamplingConfig(enabled=True, min_rows=1000)
+        result = SparkCleaner.clean_all_types(dataframe, sampling_config=config)
+
+        self.assertEqual(result.schema["int_col"].dataType.simpleString(), "bigint")
+
+    def test_sampling_disabled_uses_full_scan(self):
+        """Test that disabling sampling works correctly"""
+        data = [(str(i),) for i in range(100)]
+        schema = StructType([StructField("int_col", StringType(), True)])
+        dataframe = self.spark.createDataFrame(data, schema)
+
+        config = SamplingConfig(enabled=False)
+        result = SparkCleaner.clean_all_types(dataframe, sampling_config=config)
+
+        self.assertEqual(result.schema["int_col"].dataType.simpleString(), "bigint")
+
+    def test_integer_fallback_to_float(self):
+        """Test that integer type falls back to float when sample misses decimals"""
+        # Create data where most values are integers but some have decimals
+        # Use low min_rows to enable sampling even for small datasets
+        values = [str(i) for i in range(99)] + ["99.5"]
+        data = [(v,) for v in values]
+        schema = StructType([StructField("num_col", StringType(), True)])
+        dataframe = self.spark.createDataFrame(data, schema)
+
+        # Use sampling with very small fraction that might miss the decimal
+        # But we set seed to make it deterministic - the retry logic should catch it
+        config = SamplingConfig(enabled=True, min_rows=10, fraction=0.5, seed=42)
+        result = SparkCleaner.clean_all_types(dataframe, sampling_config=config)
+
+        # Should be float because of the 99.5 value (either detected in sample or via retry)
+        self.assertEqual(result.schema["num_col"].dataType.simpleString(), "float")
+
+    def test_boolean_fallback_to_integer(self):
+        """Test that boolean falls back to integer when sample sees 0/1 but full data has other ints"""
+        # Data with 0s and 1s (look like booleans) plus a 2
+        values = ["0", "1", "0", "1", "0", "1", "0", "1", "0", "2"]
+        data = [(v,) for v in values]
+        schema = StructType([StructField("num_col", StringType(), True)])
+        dataframe = self.spark.createDataFrame(data, schema)
+
+        # Enable sampling with low threshold
+        config = SamplingConfig(enabled=True, min_rows=5, fraction=0.5, seed=123)
+        result = SparkCleaner.clean_all_types(dataframe, sampling_config=config)
+
+        # Should be integer (or float) because of the 2 value, not boolean
+        result_type = result.schema["num_col"].dataType.simpleString()
+        self.assertIn(result_type, ["bigint", "float"])
+
+    def test_multiple_fallback_levels(self):
+        """Test fallback through multiple levels: boolean -> integer -> float -> string"""
+        # Data that looks like booleans (0/1) in sample but has a non-numeric value
+        values = ["0", "1", "0", "1", "0", "1", "0", "1", "0", "abc"]
+        data = [(v,) for v in values]
+        schema = StructType([StructField("col", StringType(), True)])
+        dataframe = self.spark.createDataFrame(data, schema)
+
+        # Enable sampling
+        config = SamplingConfig(enabled=True, min_rows=5, fraction=0.5, seed=999)
+        result = SparkCleaner.clean_all_types(dataframe, sampling_config=config)
+
+        # Should fall back to string because of the "abc" value
+        self.assertEqual(result.schema["col"].dataType.simpleString(), "string")
+
+    def test_no_fallback_on_clean_data(self):
+        """Test that no fallback occurs when data is clean and uniform"""
+        # All values are valid integers
+        values = [str(i) for i in range(100)]
+        data = [(v,) for v in values]
+        schema = StructType([StructField("int_col", StringType(), True)])
+        dataframe = self.spark.createDataFrame(data, schema)
+
+        config = SamplingConfig(enabled=True, min_rows=10, fraction=0.3, seed=42)
+        result = SparkCleaner.clean_all_types(dataframe, sampling_config=config)
+
+        # Should still be integer - no fallback needed
+        self.assertEqual(result.schema["int_col"].dataType.simpleString(), "bigint")
+
+    def test_sampling_with_seed_reproducibility(self):
+        """Test that using a seed produces reproducible results"""
+        values = [str(i) for i in range(100)]
+        data = [(v,) for v in values]
+        schema = StructType([StructField("int_col", StringType(), True)])
+
+        config = SamplingConfig(enabled=True, min_rows=10, fraction=0.3, seed=42)
+
+        # Run twice with same seed
+        df1 = self.spark.createDataFrame(data, schema)
+        result1 = SparkCleaner.clean_all_types(df1, sampling_config=config)
+
+        df2 = self.spark.createDataFrame(data, schema)
+        result2 = SparkCleaner.clean_all_types(df2, sampling_config=config)
+
+        # Both should produce the same type
+        self.assertEqual(
+            result1.schema["int_col"].dataType.simpleString(),
+            result2.schema["int_col"].dataType.simpleString()
+        )
+
+    def test_datetime_fallback_to_string(self):
+        """Test that datetime falls back to string when values don't parse"""
+        # Mix of dates and non-date strings
+        values = ["2021-01-01", "2021-02-02", "2021-03-03", "not-a-date"]
+        data = [(v,) for v in values]
+        schema = StructType([StructField("date_col", StringType(), True)])
+        dataframe = self.spark.createDataFrame(data, schema)
+
+        config = SamplingConfig(enabled=True, min_rows=2, fraction=0.5, seed=42)
+        result = SparkCleaner.clean_all_types(dataframe, sampling_config=config)
+
+        # Should be string because "not-a-date" can't be parsed
+        self.assertEqual(result.schema["date_col"].dataType.simpleString(), "string")
+
+    def test_clean_df_passes_sampling_config(self):
+        """Test that clean_df correctly passes sampling config to clean_all_types"""
+        data = [
+            ("100", "value1"),
+            ("200", "value2"),
+            ("300", "value3"),
+        ]
+        schema = StructType([
+            StructField("int_col", StringType(), True),
+            StructField("str_col", StringType(), True)
+        ])
+        dataframe = self.spark.createDataFrame(data, schema)
+
+        config = SamplingConfig(enabled=False)
+        result = SparkCleaner.clean_df(dataframe, sampling_config=config)
+
+        self.assertEqual(result.schema["int_col"].dataType.simpleString(), "bigint")
+        self.assertEqual(result.schema["str_col"].dataType.simpleString(), "string")
+
+    def test_sampling_max_rows_cap(self):
+        """Test that max_rows limits the sample size"""
+        # Create enough data to exceed max_rows
+        values = [str(i) for i in range(200)]
+        data = [(v,) for v in values]
+        schema = StructType([StructField("int_col", StringType(), True)])
+        dataframe = self.spark.createDataFrame(data, schema)
+
+        # Set max_rows to 50 with 50% fraction (would normally sample 100)
+        config = SamplingConfig(enabled=True, min_rows=10, fraction=0.5, max_rows=50, seed=42)
+        result = SparkCleaner.clean_all_types(dataframe, sampling_config=config)
+
+        # Should still work correctly
+        self.assertEqual(result.schema["int_col"].dataType.simpleString(), "bigint")
 
 
 if __name__ == "__main__":
