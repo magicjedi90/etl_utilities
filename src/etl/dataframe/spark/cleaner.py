@@ -156,11 +156,28 @@ def _try_parse_date(column: Column, source_timezone: str = "UTC") -> Column:
 
     All parsed timestamps are converted to UTC for consistent timezone handling.
 
+    Important: Session Timezone Requirement
+        For correct behavior with timezone-naive strings, the Spark session timezone
+        should be set to UTC: `spark.conf.set("spark.sql.session.timeZone", "UTC")`
+
+        When Spark's `try_to_timestamp` parses a timezone-naive string like
+        "2023-12-31 23:59:59", it interprets it in the session timezone. If the
+        session timezone is not UTC (e.g., America/New_York), timestamps at day
+        boundaries may appear to drift to the next day when converted to UTC.
+
+        Example of potential drift with non-UTC session timezone:
+        - Input: "2023-12-31 23:59:59" (naive)
+        - Session TZ: America/New_York (EST = UTC-5)
+        - Interpretation: 23:59:59 EST → stored as 2024-01-01 04:59:59 UTC
+        - Result: Date appears to drift from Dec 31 to Jan 1
+
     Args:
         column: The column to parse
         source_timezone: The timezone to assume for timezone-naive datetime strings.
                         Defaults to "UTC". For timezone-aware strings (with offset),
                         the offset is respected and this parameter is ignored.
+                        Note: This parameter applies the conversion AFTER Spark has
+                        already interpreted the string in the session timezone.
     """
     parsed_result = spark_functions.lit(None).cast(TimestampType())
     for date_format in reversed(DATE_FORMATS):

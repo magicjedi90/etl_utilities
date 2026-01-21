@@ -286,6 +286,79 @@ class TestSparkCleaner(unittest.TestCase):
         )
 
     # =========================================================================
+    # Day Boundary Tests (Timezone Drift Prevention)
+    # =========================================================================
+
+    def assert_utc_timestamp(
+        self,
+        result: DataFrame,
+        column_name: str,
+        row_index: int,
+        expected_utc_string: str
+    ):
+        """Assert that a timestamp in Spark matches the expected UTC value.
+
+        Uses Spark's date_format with UTC to verify the stored timestamp,
+        avoiding local timezone conversion issues when collecting to Python.
+        """
+        from pyspark.sql import functions as F
+
+        # Format the timestamp as UTC string in Spark (before collection converts to local TZ)
+        formatted = result.select(
+            F.date_format(F.col(column_name), "yyyy-MM-dd HH:mm:ss").alias("formatted")
+        ).collect()
+        actual_utc_string = formatted[row_index]["formatted"]
+        self.assertEqual(
+            actual_utc_string,
+            expected_utc_string,
+            f"Row {row_index}: expected UTC '{expected_utc_string}', got '{actual_utc_string}'"
+        )
+
+    def test_day_boundary_timestamp_no_drift_utc(self):
+        """Test that timestamps at 23:59:59 with UTC session don't drift to next day.
+
+        This test verifies that timezone-naive strings at day boundaries are handled
+        correctly when the Spark session timezone is UTC. Uses Spark-side assertions
+        to avoid local timezone conversion when collecting to Python.
+        """
+        dataframe = self.create_string_dataframe(
+            "date_col",
+            ["2023-12-31 23:59:59", "2023-06-30 23:59:59"]
+        )
+        result = SparkCleaner.clean_all_types(dataframe, source_timezone="UTC")
+
+        # Verify timestamps are stored correctly in UTC (not shifted)
+        self.assert_utc_timestamp(result, "date_col", 0, "2023-12-31 23:59:59")
+        self.assert_utc_timestamp(result, "date_col", 1, "2023-06-30 23:59:59")
+
+    def test_day_boundary_timestamp_with_timezone_offset(self):
+        """Test that timezone-aware timestamps at 23:59:59 correctly convert to UTC.
+
+        Expected behavior: 2023-12-31T23:59:59-05:00 becomes 2024-01-01T04:59:59 UTC.
+        The date DOES shift because the UTC equivalent is the next day - this is correct.
+        """
+        dataframe = self.create_string_dataframe(
+            "date_col",
+            ["2023-12-31T23:59:59-05:00"]
+        )
+        result = SparkCleaner.clean_all_types(dataframe)
+
+        # The -05:00 offset means this timestamp is 2024-01-01 04:59:59 UTC
+        self.assert_utc_timestamp(result, "date_col", 0, "2024-01-01 04:59:59")
+
+    def test_day_boundary_start_of_day(self):
+        """Test that timestamps at 00:00:00 are handled correctly."""
+        dataframe = self.create_string_dataframe(
+            "date_col",
+            ["2023-01-01 00:00:00", "2023-06-15 00:00:01"]
+        )
+        result = SparkCleaner.clean_all_types(dataframe, source_timezone="UTC")
+
+        # Verify timestamps at start of day are stored correctly
+        self.assert_utc_timestamp(result, "date_col", 0, "2023-01-01 00:00:00")
+        self.assert_utc_timestamp(result, "date_col", 1, "2023-06-15 00:00:01")
+
+    # =========================================================================
     # Empty and Whitespace String Handling Tests
     # =========================================================================
 
