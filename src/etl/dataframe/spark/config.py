@@ -1,7 +1,9 @@
-# src/etl/dataframe/spark/config.py
+# src/etl/dataframe/spark/constants.py
 """Configuration constants and dataclasses for Spark type inference and cleaning."""
 
 import dataclasses
+
+from ..common.constants import TRUTHY_VALUES, FALSY_VALUES, ALL_BOOLEAN_VALUES
 
 
 @dataclasses.dataclass(slots=True, frozen=True)
@@ -23,10 +25,14 @@ TYPE_FALLBACK_HIERARCHY: dict[str, list[str]] = {
     'string': [],
 }
 
-# Boolean truthy/falsy values (lowercase)
-TRUTHY_VALUES = ('y', 'yes', 't', 'true', 'on', '1')
-FALSY_VALUES = ('n', 'no', 'f', 'false', 'off', '0')
-ALL_BOOLEAN_VALUES = TRUTHY_VALUES + FALSY_VALUES
+# Re-export for backwards compatibility
+__all__ = [
+    "SamplingConfig",
+    "TYPE_FALLBACK_HIERARCHY",
+    "TRUTHY_VALUES",
+    "FALSY_VALUES",
+    "ALL_BOOLEAN_VALUES",
+]
 
 # Common date formats to try (ordered by specificity)
 DATE_FORMATS = [

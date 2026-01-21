@@ -4,7 +4,7 @@ from typing import List, Optional
 import polars as pl
 
 from .parser import PolarsParser
-from ..cleaner import standardize_column_name, compute_hash
+from ..common.utils import standardize_column_name, compute_hash
 
 # Set up logging
 logger = logging.getLogger(__name__)

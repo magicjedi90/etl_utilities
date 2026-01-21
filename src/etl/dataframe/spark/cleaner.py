@@ -6,7 +6,7 @@ import logging
 from pyspark.sql import functions as spark_functions
 from pyspark.sql import DataFrame
 
-from ..cleaner import standardize_column_name
+from ..common.utils import standardize_column_name
 from .config import SamplingConfig
 from .type_inference import (
     get_type_checks,

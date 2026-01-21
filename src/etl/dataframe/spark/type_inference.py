@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_type_checks(source_timezone: str) -> list[dict]:
-    """Get the type check definitions with timezone-aware date parser."""
+    """Get the type check definitions with a timezone-aware date parser."""
     def parse_date_with_tz(column: Column) -> Column:
         return parse_date(column, source_timezone)
 
@@ -36,7 +36,7 @@ def get_sample(dataframe: DataFrame, config: SamplingConfig, total_rows: int) ->
     if not config.enabled or total_rows < config.min_rows:
         return None
 
-    # Calculate effective fraction to cap at max_rows
+    # Calculate an effective fraction to cap at max_rows
     effective_fraction = min(config.fraction, config.max_rows / total_rows)
 
     return dataframe.sample(withReplacement=False, fraction=effective_fraction, seed=config.seed)
@@ -46,7 +46,7 @@ def infer_types_from_dataframe(
     dataframe: DataFrame,
     type_checks: list[dict],
 ) -> dict[str, Optional[dict]]:
-    """Infer best type for each column using single-pass aggregation.
+    """Infer the best type for each column using single-pass aggregation.
 
     Returns a dict mapping column name to the chosen type_check dict (or None).
     """
@@ -68,10 +68,10 @@ def infer_types_from_dataframe(
                 ).alias(f"{column_name}__{type_check['name']}")
             )
 
-    # Execute single aggregation to get all statistics
+    # Execute a single aggregation to get all statistics
     statistics_row = dataframe.agg(*aggregation_expressions).first()
 
-    # Determine best type for each column based on collected stats
+    # Determine the best type for each column based on collected stats
     column_type_mapping: dict[str, Optional[dict]] = {}
     for column_name in dataframe.columns:
         non_null_count = statistics_row[f"{column_name}__non_null"]
@@ -103,7 +103,7 @@ def detect_conversion_failures(
 
     Returns the number of values that were non-null/non-empty before but null after.
     """
-    # Count non-null, non-empty in original
+    # Count non-null, non-empty in the original
     original_non_null = original_df.select(
         spark_functions.sum(
             spark_functions.when(

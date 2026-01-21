@@ -5,6 +5,8 @@ from typing import Optional, Any
 import polars as pl
 from dateutil import parser
 
+from ..common.constants import TRUTHY_VALUES, FALSY_VALUES
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -15,8 +17,9 @@ class PolarsParser:
     These methods are designed to work with Polars' expression system.
     """
 
-    TRUTHY_VALUES = ['y', 'yes', 't', 'true', 'on', '1']
-    FALSY_VALUES = ['n', 'no', 'f', 'false', 'off', '0']
+    # Re-export for backwards compatibility
+    TRUTHY_VALUES = list(TRUTHY_VALUES)
+    FALSY_VALUES = list(FALSY_VALUES)
 
     # Cleaning patterns for numeric values
     NUMERIC_CLEANUP_PATTERNS = [
