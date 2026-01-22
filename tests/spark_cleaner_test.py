@@ -220,7 +220,7 @@ class TestSparkCleaner(unittest.TestCase):
             "float_col", ["1.5", "2.75", "3.14159", "-0.5"]
         )
 
-        self.assertEqual(result_type, "float")
+        self.assertEqual(result_type, "double")
         self.assertAlmostEqual(result_values[0], 1.5, places=2)
         self.assertAlmostEqual(result_values[1], 2.75, places=2)
         self.assertAlmostEqual(result_values[2], 3.14159, places=4)
@@ -232,7 +232,7 @@ class TestSparkCleaner(unittest.TestCase):
             "float_col", ["$1,000.50", "%99.9", "1,234.56"]
         )
 
-        self.assertEqual(result_type, "float")
+        self.assertEqual(result_type, "double")
         self.assertAlmostEqual(result_values[0], 1000.50, places=2)
         self.assertAlmostEqual(result_values[1], 99.9, places=1)
         self.assertAlmostEqual(result_values[2], 1234.56, places=2)
@@ -243,7 +243,7 @@ class TestSparkCleaner(unittest.TestCase):
             "float_col", ["1.5", None, "2.5", None]
         )
 
-        self.assertEqual(result_type, "float")
+        self.assertEqual(result_type, "double")
         self.assertAlmostEqual(result_values[0], 1.5, places=2)
         self.assertIsNone(result_values[1])
         self.assertAlmostEqual(result_values[2], 2.5, places=2)
@@ -377,7 +377,7 @@ class TestSparkCleaner(unittest.TestCase):
             "float_col", ["1.5", "", "2.5", "   ", None]
         )
 
-        self.assertEqual(result_type, "float")
+        self.assertEqual(result_type, "double")
         self.assertAlmostEqual(result_values[0], 1.5, places=2)
         self.assertIsNone(result_values[1])
         self.assertAlmostEqual(result_values[2], 2.5, places=2)
@@ -426,7 +426,7 @@ class TestSparkCleaner(unittest.TestCase):
         expected_types = {
             "boolean_col": "boolean",
             "integer_col": "bigint",
-            "float_col": "float",
+            "float_col": "double",
             "date_col": "timestamp",
             "string_col": "string"
         }
@@ -534,7 +534,7 @@ class TestSparkCleaner(unittest.TestCase):
 
         result = SparkCleaner.clean_all_types(dataframe)
 
-        expected_types = {"bool_col": "boolean", "int_col": "bigint", "float_col": "float", "date_col": "timestamp"}
+        expected_types = {"bool_col": "boolean", "int_col": "bigint", "float_col": "double", "date_col": "timestamp"}
         for column_name, expected_type in expected_types.items():
             self.assertEqual(result.schema[column_name].dataType.simpleString(), expected_type)
 
@@ -594,7 +594,7 @@ class TestSparkCleaner(unittest.TestCase):
 
     def test_negative_numbers(self):
         """Test handling of negative numbers"""
-        self.assert_column_type("negative", ["-100", "-200.5", "-0.001"], "float")
+        self.assert_column_type("negative", ["-100", "-200.5", "-0.001"], "double")
 
     # =========================================================================
     # Sampling Configuration Tests
@@ -662,8 +662,8 @@ class TestSparkCleaner(unittest.TestCase):
         config = SamplingConfig(enabled=True, min_rows=10, fraction=0.5, seed=42)
         result = SparkCleaner.clean_all_types(dataframe, sampling_config=config)
 
-        # Should be float because of the 99.5 value (either detected in sample or via retry)
-        self.assertEqual(result.schema["num_col"].dataType.simpleString(), "float")
+        # Should be double because of the 99.5 value (either detected in sample or via retry)
+        self.assertEqual(result.schema["num_col"].dataType.simpleString(), "double")
 
     def test_boolean_fallback_to_integer(self):
         """Test that boolean falls back to integer when sample sees 0/1 but full data has other ints"""
@@ -679,7 +679,7 @@ class TestSparkCleaner(unittest.TestCase):
 
         # Should be integer (or float) because of the 2 value, not boolean
         result_type = result.schema["num_col"].dataType.simpleString()
-        self.assertIn(result_type, ["bigint", "float"])
+        self.assertIn(result_type, ["bigint", "double"])
 
     def test_multiple_fallback_levels(self):
         """Test fallback through multiple levels: boolean -> integer -> float -> string"""

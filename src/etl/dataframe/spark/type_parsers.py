@@ -3,7 +3,7 @@
 
 from pyspark.sql import functions as spark_functions
 from pyspark.sql import Column
-from pyspark.sql.types import BooleanType, LongType, FloatType, TimestampType
+from pyspark.sql.types import BooleanType, LongType, DoubleType, TimestampType
 
 from .config import TRUTHY_VALUES, FALSY_VALUES
 from .type_checkers import _is_null_or_empty, _clean_numeric_string, _try_parse_date
@@ -36,13 +36,13 @@ def parse_integer(column: Column) -> Column:
 
 
 def parse_float(column: Column) -> Column:
-    """Native Spark SQL float parser."""
+    """Native Spark SQL float parser using DoubleType (64-bit) for financial precision."""
     cleaned_value = _clean_numeric_string(spark_functions.trim(column))
     # Use try_cast to return null for invalid inputs instead of throwing CAST_INVALID_INPUT
     return spark_functions.when(
-        _is_null_or_empty(column), spark_functions.lit(None).cast(FloatType())
+        _is_null_or_empty(column), spark_functions.lit(None).cast(DoubleType())
     ).otherwise(
-        cleaned_value.try_cast(FloatType())
+        cleaned_value.try_cast(DoubleType())
     )
 
 
