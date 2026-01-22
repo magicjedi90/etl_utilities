@@ -98,6 +98,64 @@ class TestCleaner(unittest.TestCase):
         self.assertEqual(result_df.shape, (2, 1))
         pd.testing.assert_frame_equal(result_df, expected_df)
 
+    def test_parse_numbers_with_empty_strings(self):
+        df = pd.DataFrame({
+            'ints': ['100', '', '200', '   '],
+            'floats': ['1.5', '', '2.5', '   ']
+        })
+        clean_df = Cleaner.clean_numbers(df)
+        # With None values, clean_numbers returns float64 (standard pandas behavior)
+        # Use convert_dtypes() or clean_all_types() for nullable Int64
+        self.assertEqual(clean_df['ints'].dtype, 'float64')
+        self.assertEqual(clean_df['floats'].dtype, 'float64')
+        # Verify empty strings become NaN
+        self.assertTrue(pd.isna(clean_df['ints'].iloc[1]))
+        self.assertTrue(pd.isna(clean_df['ints'].iloc[3]))
+        self.assertTrue(pd.isna(clean_df['floats'].iloc[1]))
+        self.assertTrue(pd.isna(clean_df['floats'].iloc[3]))
+        # Verify valid values are parsed correctly
+        self.assertEqual(clean_df['ints'].iloc[0], 100.0)
+        self.assertEqual(clean_df['floats'].iloc[0], 1.5)
+
+    def test_clean_bools_with_empty_strings(self):
+        df = pd.DataFrame({
+            'bools': ['yes', '', 'no', '   ']
+        })
+        clean_df = Cleaner.clean_bools(df)
+        # With None values, clean_bools returns object dtype (standard pandas behavior)
+        # Use convert_dtypes() or clean_all_types() for nullable boolean
+        self.assertEqual(clean_df['bools'].dtype, 'object')
+        # Verify empty strings become None
+        self.assertIsNone(clean_df['bools'].iloc[1])
+        self.assertIsNone(clean_df['bools'].iloc[3])
+        # Verify valid values are parsed correctly
+        self.assertTrue(clean_df['bools'].iloc[0])
+        self.assertFalse(clean_df['bools'].iloc[2])
+
+    def test_clean_dates_with_empty_strings(self):
+        df = pd.DataFrame({
+            'dates': ['2021-01-01', '', '2021-02-02', '   ']
+        })
+        clean_df = Cleaner.clean_dates(df)
+        self.assertEqual(clean_df['dates'].dtype, 'datetime64[ns]')
+        self.assertTrue(pd.isna(clean_df['dates'].iloc[1]))
+        self.assertTrue(pd.isna(clean_df['dates'].iloc[3]))
+
+    def test_clean_all_types_with_empty_strings(self):
+        df = pd.DataFrame({
+            'numbers': ['100', '', '200', '   '],
+            'bools': ['yes', '', 'no', '   '],
+            'dates': ['2021-01-01', '', '2021-02-02', '   ']
+        })
+        clean_df = Cleaner.clean_all_types(df)
+        self.assertEqual(clean_df['numbers'].dtype, pd.Int64Dtype.name)
+        self.assertEqual(clean_df['bools'].dtype, pd.BooleanDtype.name)
+        self.assertEqual(clean_df['dates'].dtype, 'datetime64[ns]')
+        # Verify empty strings became None/NaN
+        self.assertTrue(pd.isna(clean_df['numbers'].iloc[1]))
+        self.assertTrue(pd.isna(clean_df['bools'].iloc[1]))
+        self.assertTrue(pd.isna(clean_df['dates'].iloc[1]))
+
 
 if __name__ == '__main__':
     unittest.main()

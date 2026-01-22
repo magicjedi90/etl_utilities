@@ -779,6 +779,34 @@ class TestSparkCleaner(unittest.TestCase):
         # Should still work correctly
         self.assertEqual(result.schema["int_col"].dataType.simpleString(), "bigint")
 
+    def test_invalid_cast_falls_back_to_string_not_exception(self):
+        """Test that invalid numeric strings fall back to string type without throwing CAST_INVALID_INPUT.
+
+        Regression test: When sampling infers integer type but full data contains
+        un-castable strings like 'abc', the parser should gracefully return null
+        (using try_cast) rather than throwing CAST_INVALID_INPUT exception.
+        This allows the retry logic to detect the failure and fall back to string.
+        """
+        # Data where most values look like integers but one is completely invalid
+        # The sampling might miss the invalid value and infer integer type
+        values = ["100", "200", "300", "400", "500", "600", "700", "800", "900", "abc"]
+        data = [(v,) for v in values]
+        schema = StructType([StructField("num_col", StringType(), True)])
+        dataframe = self.spark.createDataFrame(data, schema)
+
+        # Use sampling that could miss the "abc" value
+        config = SamplingConfig(enabled=True, min_rows=5, fraction=0.5, seed=42)
+
+        # This should NOT throw CAST_INVALID_INPUT - should fall back to string
+        result = SparkCleaner.clean_all_types(dataframe, sampling_config=config)
+
+        # Should be string because "abc" can't be parsed as integer/float
+        self.assertEqual(result.schema["num_col"].dataType.simpleString(), "string")
+
+        # Verify the "abc" value is preserved
+        abc_value = result.filter(result.num_col == "abc").count()
+        self.assertEqual(abc_value, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -26,21 +26,23 @@ def parse_boolean(column: Column) -> Column:
 def parse_integer(column: Column) -> Column:
     """Native Spark SQL integer parser using LongType (64-bit) for large values."""
     cleaned_value = _clean_numeric_string(spark_functions.trim(column))
-    # Cast through double first to handle strings like "100.00"
+    # Use try_cast through double first to handle strings like "100.00"
+    # try_cast returns null for invalid inputs instead of throwing CAST_INVALID_INPUT
     return spark_functions.when(
         _is_null_or_empty(column), spark_functions.lit(None).cast(LongType())
     ).otherwise(
-        cleaned_value.cast('double').cast(LongType())
+        cleaned_value.try_cast('double').cast(LongType())
     )
 
 
 def parse_float(column: Column) -> Column:
     """Native Spark SQL float parser."""
     cleaned_value = _clean_numeric_string(spark_functions.trim(column))
+    # Use try_cast to return null for invalid inputs instead of throwing CAST_INVALID_INPUT
     return spark_functions.when(
         _is_null_or_empty(column), spark_functions.lit(None).cast(FloatType())
     ).otherwise(
-        cleaned_value.cast(FloatType())
+        cleaned_value.try_cast(FloatType())
     )
 
 

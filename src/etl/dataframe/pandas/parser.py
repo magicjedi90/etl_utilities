@@ -26,7 +26,10 @@ class Parser:
         """
         if pd.isnull(value):
             return None
-        value = str(value).lower()
+        value = str(value).strip()
+        if value == '':
+            return None
+        value = value.lower()
         if value in TRUTHY_VALUES:
             return True
         elif value in FALSY_VALUES:
@@ -47,7 +50,9 @@ class Parser:
         """
         if pd.isnull(value):
             return None
-        cleaned_value = str(value).replace(',', '').replace('$', '').replace('%', '')
+        cleaned_value = str(value).replace(',', '').replace('$', '').replace('%', '').strip()
+        if cleaned_value == '':
+            return None
         return float(cleaned_value)
 
     @staticmethod
@@ -63,7 +68,10 @@ class Parser:
         """
         if pd.isnull(value):
             return None
-        return parser.parse(str(value).strip())
+        value_str = str(value).strip()
+        if value_str == '':
+            return None
+        return parser.parse(value_str)
 
     @staticmethod
     def parse_integer(value):
@@ -81,7 +89,9 @@ class Parser:
         """
         if pd.isnull(value):
             return None
-        cleaned_value = str(value).replace(',', '').replace('$', '').replace('%', '')
+        cleaned_value = str(value).replace(',', '').replace('$', '').replace('%', '').strip()
+        if cleaned_value == '':
+            return None
         float_value = float(cleaned_value)
         int_value = int(float_value)
         if float_value == int_value:
