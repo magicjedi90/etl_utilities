@@ -9,6 +9,7 @@ from pyspark.sql import Column, DataFrame
 from pyspark.sql.types import StringType
 
 from .config import SamplingConfig, TYPE_FALLBACK_HIERARCHY
+from .diagnostics import get_failed_value_samples
 from .type_checkers import is_boolean, is_integer, is_float, is_date
 from .type_parsers import parse_boolean, parse_integer, parse_float, parse_date
 
@@ -171,6 +172,16 @@ def apply_type_with_retry(
             f"Column '{column_name}': {failures} values failed conversion to {current_type}, "
             f"trying fallback to {fallback_type}."
         )
+
+        # Log sample failed values at DEBUG level for debugging
+        if logger.isEnabledFor(logging.DEBUG):
+            sample_failed = get_failed_value_samples(
+                dataframe, converted_df, column_name, limit=3
+            )
+            if sample_failed:
+                logger.debug(
+                    f"Column '{column_name}': sample failed values: {sample_failed}"
+                )
 
         if fallback_type == 'string':
             # String fallback - no conversion needed, return original
