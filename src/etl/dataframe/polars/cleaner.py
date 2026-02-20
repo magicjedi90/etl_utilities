@@ -120,15 +120,27 @@ class PolarsCleaner:
         if columns is None:
             columns = df.columns
 
-        cleaning_expressions = []
+        if not columns:
+            return PolarsCleaner.optimize_dtypes(df)
 
-        for column in columns:
-            # Skip if column has no non-null values
-            if df.select(pl.col(column).drop_nulls()).height == 0:
-                logger.info(f"{column} is empty, skipping cleaning")
-                cleaning_expressions.append(pl.col(column))
-                continue
+        # --- Phase 1: single scan to find empty columns ---
+        non_null_counts = df.select([
+            pl.col(col).is_not_null().sum().alias(col) for col in columns
+        ]).row(0, named=True)
 
+        non_empty = [col for col in columns if non_null_counts[col] > 0]
+        for col in columns:
+            if non_null_counts[col] == 0:
+                logger.info(f"{col} is empty, skipping cleaning")
+
+        if not non_empty:
+            return PolarsCleaner.optimize_dtypes(df)
+
+        # --- Phase 2: single scan to count parse successes for all non-empty columns ---
+        count_exprs = []
+        column_info = {}  # col -> (bool_expr, num_expr, date_expr_full)
+
+        for column in non_empty:
             original = pl.col(column)
             # Treat empty or whitespace-only strings as nulls for the purpose of
             # determining if a parser covers all meaningful values. This allows
@@ -148,19 +160,36 @@ class PolarsCleaner:
             # But keep a tolerant, full date parser for final application if date wins
             date_expr_full = PolarsParser.parse_date_expr(column)
 
-            # Evaluate non-null counts for each candidate expression
-            try:
-                counts = df.select([
-                    effective_original.is_not_null().sum().alias("orig"),
-                    bool_expr.is_not_null().sum().alias("bool"),
-                    num_expr.is_not_null().sum().alias("num"),
-                    date_expr_count.is_not_null().sum().alias("date"),
-                ]).row(0)
-                original_count, bool_count, num_cnt, date_cnt = counts
-            except Exception as e:
-                logger.debug(f"Could not evaluate counts for {column}: {e}")
-                cleaning_expressions.append(original)
+            column_info[column] = (bool_expr, num_expr, date_expr_full)
+
+            count_exprs.extend([
+                effective_original.is_not_null().sum().alias(f"{column}__orig"),
+                bool_expr.is_not_null().sum().alias(f"{column}__bool"),
+                num_expr.is_not_null().sum().alias(f"{column}__num"),
+                date_expr_count.is_not_null().sum().alias(f"{column}__date"),
+            ])
+
+        try:
+            all_counts = df.select(count_exprs).row(0, named=True)
+        except Exception as e:
+            logger.debug(f"Batched count evaluation failed: {e}")
+            return PolarsCleaner.optimize_dtypes(df)
+
+        # --- Phase 3: choose best parser per column and apply in a single pass ---
+        cleaning_expressions = []
+
+        for column in columns:
+            if column not in column_info:
+                # Empty column — keep as-is
+                cleaning_expressions.append(pl.col(column))
                 continue
+
+            original_count = all_counts[f"{column}__orig"]
+            bool_count = all_counts[f"{column}__bool"]
+            num_cnt = all_counts[f"{column}__num"]
+            date_cnt = all_counts[f"{column}__date"]
+
+            bool_expr, num_expr, date_expr_full = column_info[column]
 
             # Choose the best parser among bool/num/date based on highest non-null count
             # Tie-breaker priority: bool > num > date
@@ -181,11 +210,10 @@ class PolarsCleaner:
                 else:
                     chosen = date_expr_full
             else:
-                chosen = original
+                chosen = pl.col(column)
 
             cleaning_expressions.append(chosen.alias(column))
 
-        # Apply all chosen expressions in a single pass
         df = df.with_columns(cleaning_expressions)
         return PolarsCleaner.optimize_dtypes(df)
 
@@ -197,8 +225,13 @@ class PolarsCleaner:
         :param df: Polars DataFrame
         :return: Cleaned DataFrame
         """
-        # Remove columns that are all null
-        df = df.select([col for col in df.columns if df.select(pl.col(col).is_not_null().any()).item()])
+        # Remove columns that are all null — single scan for all columns
+        if not df.columns:
+            return df
+        has_data = df.select([
+            pl.col(col).is_not_null().any() for col in df.columns
+        ]).row(0)
+        df = df.select([col for col, keep in zip(df.columns, has_data) if keep])
         
         return PolarsCleaner.clean_all_types(df)
     
