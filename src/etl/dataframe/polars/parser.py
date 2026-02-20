@@ -34,19 +34,21 @@ class PolarsParser:
         Create a Polars expression for parsing boolean values.
         Returns an expression that converts various truthy/falsy strings to boolean.
         Handles empty strings and whitespace by converting them to null before boolean conversion.
+        Fully vectorized — no Python-level row iteration.
         """
-        # Normalize input: cast to Utf8 safely, handle nulls, strip whitespace
-        original = pl.col(column)
-        cleaned_utf8 = original.cast(pl.Utf8, strict=False)
-        cleaned_utf8 = cleaned_utf8.str.strip_chars()
-        
-        # Handle nulls and empty strings after stripping
-        is_null_or_empty = (cleaned_utf8.is_null() | (cleaned_utf8 == ""))
-        
-        # Apply boolean parsing with proper null handling
-        return pl.when(is_null_or_empty)\
-            .then(None)\
-            .otherwise(cleaned_utf8.map_elements(PolarsParser.parse_bool_value, return_dtype=pl.Boolean))
+        cleaned_utf8 = pl.col(column).cast(pl.Utf8, strict=False).str.strip_chars()
+        is_null_or_empty = cleaned_utf8.is_null() | (cleaned_utf8 == "")
+        lowered = cleaned_utf8.str.to_lowercase()
+
+        return (
+            pl.when(is_null_or_empty)
+            .then(pl.lit(None, dtype=pl.Boolean))
+            .when(lowered.is_in(PolarsParser.TRUTHY_VALUES))
+            .then(pl.lit(True))
+            .when(lowered.is_in(PolarsParser.FALSY_VALUES))
+            .then(pl.lit(False))
+            .otherwise(pl.lit(None, dtype=pl.Boolean))
+        )
 
     @staticmethod
     def parse_bool_value(val: Any) -> Optional[bool]:

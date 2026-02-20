@@ -155,18 +155,18 @@ class PolarsCleaner:
             )
             bool_expr = PolarsParser.parse_boolean_expr(column)
             num_expr = PolarsParser.parse_integer_expr(column)
-            # Use fast vectorized date parsing for counting to avoid expensive/python fallback affecting selection
-            date_expr_count = PolarsParser.parse_date_expr_vectorized(column)
-            # But keep a tolerant, full date parser for final application if date wins
-            date_expr_full = PolarsParser.parse_date_expr(column)
+            # Use fast vectorized date parsing for both counting and application.
+            # Date only wins when date_cnt == original_count, meaning vectorized
+            # already parsed everything — no need for the expensive dateutil fallback.
+            date_expr = PolarsParser.parse_date_expr_vectorized(column)
 
-            column_info[column] = (bool_expr, num_expr, date_expr_full)
+            column_info[column] = (bool_expr, num_expr, date_expr)
 
             count_exprs.extend([
                 effective_original.is_not_null().sum().alias(f"{column}__orig"),
                 bool_expr.is_not_null().sum().alias(f"{column}__bool"),
                 num_expr.is_not_null().sum().alias(f"{column}__num"),
-                date_expr_count.is_not_null().sum().alias(f"{column}__date"),
+                date_expr.is_not_null().sum().alias(f"{column}__date"),
             ])
 
         try:
@@ -189,7 +189,7 @@ class PolarsCleaner:
             num_cnt = all_counts[f"{column}__num"]
             date_cnt = all_counts[f"{column}__date"]
 
-            bool_expr, num_expr, date_expr_full = column_info[column]
+            bool_expr, num_expr, date_expr = column_info[column]
 
             # Choose the best parser among bool/num/date based on highest non-null count
             # Tie-breaker priority: bool > num > date
@@ -208,7 +208,7 @@ class PolarsCleaner:
                 elif top_kind == 'num':
                     chosen = num_expr
                 else:
-                    chosen = date_expr_full
+                    chosen = date_expr
             else:
                 chosen = pl.col(column)
 
