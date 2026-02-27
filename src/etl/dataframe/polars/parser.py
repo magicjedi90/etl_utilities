@@ -88,8 +88,11 @@ class PolarsParser:
         # After cleanup, check again for empty strings (e.g., "N/A" -> "" after cleanup)
         is_null_or_empty = is_null_or_empty | (expr == "")
 
-        # Convert to float, handling nulls and empty strings properly
-        return pl.when(is_null_or_empty).then(None).otherwise(expr.cast(pl.Float64, strict=False))
+        # Convert to float, handling nulls and empty strings properly.
+        # Also reject inf/nan — they parse as valid Float64 but are not
+        # meaningful numeric data.
+        raw_float = expr.cast(pl.Float64, strict=False)
+        return pl.when(is_null_or_empty | raw_float.is_nan() | raw_float.is_infinite()).then(None).otherwise(raw_float)
 
 
     @staticmethod
@@ -170,12 +173,15 @@ class PolarsParser:
         # After cleanup, check again for empty strings (e.g., "N/A" -> "" after cleanup)
         is_null_or_empty = is_null_or_empty | (cleaned_utf8 == "")
             
-        # Convert to float, handling nulls and empty strings properly
-        cleaned_float = pl.when(is_null_or_empty).then(None).otherwise(cleaned_utf8.cast(pl.Float64, strict=False))
+        # Convert to float, handling nulls and empty strings properly.
+        # Also reject inf/nan — they parse as valid Float64 but are not
+        # meaningful numeric data and cannot be safely cast to Int64.
+        raw_float = cleaned_utf8.cast(pl.Float64, strict=False)
+        cleaned_float = pl.when(is_null_or_empty | raw_float.is_nan() | raw_float.is_infinite()).then(None).otherwise(raw_float)
 
         # Then check if it's a whole number and cast to integer if so
         return (pl.when(cleaned_float.is_null())
                 .then(None)
                 .when(cleaned_float == cleaned_float.round(0))
-                .then(cleaned_float.cast(pl.Int64))
+                .then(cleaned_float.cast(pl.Int64, strict=False))
                 .otherwise(cleaned_float))

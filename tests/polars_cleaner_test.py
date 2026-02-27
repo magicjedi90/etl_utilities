@@ -254,6 +254,46 @@ class TestPolarsCleaner:
         assert cleaned['amount'][5] == 2500.5   # "2,500.50" -> 2500.5
         assert cleaned['amount'][6] is None     # None -> None
 
+    def test_dirty_numeric_value_stays_string(self):
+        """Column with dirty numeric-like value '5092345.17890 (DD)' should stay String."""
+        df = pl.DataFrame({
+            'val': ['100', '200', '5092345.17890 (DD)', '400'],
+        })
+        result = PolarsCleaner.clean_all_types(df)
+        assert result['val'].dtype == pl.String
+        assert result['val'].to_list() == ['100', '200', '5092345.17890 (DD)', '400']
+
+    def test_dirty_value_null_in_numeric_column(self):
+        """parse_integer_expr returns null for dirty values like '5092345.17890 (DD)'."""
+        df = pl.DataFrame({'val': ['100', '5092345.17890 (DD)', '300']})
+        from src.etl.dataframe.polars.parser import PolarsParser
+        result = df.select(PolarsParser.parse_integer_expr('val').alias('val'))
+        assert result['val'].to_list() == [100.0, None, 300.0]
+
+    def test_inf_nan_values_do_not_crash_parser(self):
+        """Strings like 'inf', 'nan', 'Infinity' must not crash parse_integer_expr."""
+        df = pl.DataFrame({'val': ['100', 'inf', '-inf', 'nan', 'Infinity', 'NaN', '200']})
+        from src.etl.dataframe.polars.parser import PolarsParser
+        result = df.select(PolarsParser.parse_integer_expr('val').alias('val'))
+        assert result['val'][0] == 100.0
+        assert result['val'][-1] == 200.0
+        # inf/nan values should become null, not crash
+        for i in range(1, 6):
+            assert result['val'][i] is None
+
+    def test_dirty_values_among_valid_numbers(self):
+        """clean_numbers handles dirty alphanumeric values without errors."""
+        df = pl.DataFrame({
+            'amount': ['$1,000', '5092345.17890 (DD)', '2500', 'abc123', None]
+        })
+        cleaned = PolarsCleaner.clean_numbers(df, ['amount'])
+        assert cleaned['amount'].dtype == pl.Float64
+        assert cleaned['amount'][0] == 1000.0
+        assert cleaned['amount'][1] is None   # dirty value -> null
+        assert cleaned['amount'][2] == 2500.0
+        assert cleaned['amount'][3] is None   # non-numeric -> null
+        assert cleaned['amount'][4] is None
+
     def test_generate_hash_column(self, sample_dataframe):
         """Test hash column generation"""
         df = PolarsCleaner.generate_hash_column(
