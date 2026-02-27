@@ -330,6 +330,87 @@ class TestPolarsCleaner:
         assert result['values'].dtype == pl.Float64
         assert result['values'].to_list() == [1.0, 2.0, 3.0]
 
+    # --- type_overrides tests ---
+
+    def test_type_overrides_casts_to_specified_type(self):
+        """type_overrides casts columns directly without inference."""
+        df = pl.DataFrame({
+            'age': ['25', '30', '35'],
+            'name': ['Alice', 'Bob', 'Carol'],
+        })
+        result = PolarsCleaner.clean_all_types(df, type_overrides={'age': pl.Int32})
+        assert result['age'].dtype == pl.Int32
+        assert result['age'].to_list() == [25, 30, 35]
+        # name should still be inferred as String
+        assert result['name'].dtype == pl.String
+
+    def test_type_overrides_skips_inference(self):
+        """Overridden columns skip the bool/num/date inference pipeline."""
+        df = pl.DataFrame({
+            # Without override, these would be inferred as Boolean
+            'flag': ['yes', 'no', 'yes'],
+        })
+        # Force it to stay String
+        result = PolarsCleaner.clean_all_types(df, type_overrides={'flag': pl.String})
+        assert result['flag'].dtype == pl.String
+        assert result['flag'].to_list() == ['yes', 'no', 'yes']
+
+    def test_type_overrides_on_all_null_column(self):
+        """Override still casts all-null columns to the requested type."""
+        df = pl.DataFrame({
+            'empty': [None, None, None],
+            'data': ['1', '2', '3'],
+        })
+        result = PolarsCleaner.clean_all_types(df, type_overrides={'empty': pl.Float64})
+        assert result['empty'].dtype == pl.Float64
+        assert result['empty'].to_list() == [None, None, None]
+
+    def test_type_overrides_unknown_column_ignored(self):
+        """Override for a column not in the DataFrame is silently ignored."""
+        df = pl.DataFrame({'x': ['1', '2', '3']})
+        result = PolarsCleaner.clean_all_types(df, type_overrides={'missing_col': pl.Int64})
+        # Should not raise — just cleans normally
+        assert result['x'].dtype == pl.Float64
+
+    def test_type_overrides_mixed_with_inference(self):
+        """Some columns overridden, others inferred normally."""
+        df = pl.DataFrame({
+            'amount': ['$1,000', '$2,000', '$3,000'],
+            'active': ['yes', 'no', 'true'],
+            'label': ['a', 'b', 'c'],
+        })
+        result = PolarsCleaner.clean_all_types(
+            df, type_overrides={'amount': pl.String}
+        )
+        # amount forced to String — no numeric parsing
+        assert result['amount'].dtype == pl.String
+        assert result['amount'].to_list() == ['$1,000', '$2,000', '$3,000']
+        # active still inferred as Boolean
+        assert result['active'].dtype == pl.Boolean
+        # label stays String
+        assert result['label'].dtype == pl.String
+
+    def test_type_overrides_via_clean_df(self):
+        """clean_df passes type_overrides through to clean_all_types."""
+        df = pl.DataFrame({
+            'val': ['10', '20', '30'],
+            'junk': [None, None, None],
+        })
+        result = PolarsCleaner.clean_df(df, type_overrides={'val': pl.Int16})
+        # junk column removed (all null), val cast to Int16
+        assert 'junk' not in result.columns
+        assert result['val'].dtype == pl.Int16
+        assert result['val'].to_list() == [10, 20, 30]
+
+    def test_type_overrides_skips_optimize_dtypes(self):
+        """Overridden columns are not downcasted by optimize_dtypes."""
+        df = pl.DataFrame({
+            'small': ['1', '2', '3'],  # Would be downcasted to UInt8 normally
+        })
+        result = PolarsCleaner.clean_all_types(df, type_overrides={'small': pl.Int64})
+        # User asked for Int64, should stay Int64 (not downcasted)
+        assert result['small'].dtype == pl.Int64
+
     def test_edge_case_all_null_column_skipped(self):
         """clean_all_types skips all-null columns and still cleans others."""
         df = pl.DataFrame({

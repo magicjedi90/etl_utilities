@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import polars as pl
 from rich.console import Console
@@ -109,7 +109,11 @@ class PolarsCleaner:
         return df
 
     @staticmethod
-    def clean_all_types(df: pl.DataFrame, columns: Optional[List[str]] = None) -> pl.DataFrame:
+    def clean_all_types(
+        df: pl.DataFrame,
+        columns: Optional[List[str]] = None,
+        type_overrides: Optional[Dict[str, pl.DataType]] = None,
+    ) -> pl.DataFrame:
         """
         Perform comprehensive cleaning on all columns by trying different parsing functions.
         Strategy:
@@ -118,12 +122,23 @@ class PolarsCleaner:
         - Apply for all target columns in a single pass for efficiency.
         :param df: Polars DataFrame
         :param columns: List of columns to clean (if None, clean all columns)
+        :param type_overrides: Dict mapping column names to Polars DataTypes.
+               Overridden columns skip inference and are cast directly.
         :return: DataFrame with all columns cleaned
         """
         if columns is None:
             columns = df.columns
 
-        if not columns:
+        if type_overrides is None:
+            type_overrides = {}
+
+        # Filter out overrides for columns not present in the DataFrame
+        overrides = {col: dtype for col, dtype in type_overrides.items() if col in df.columns}
+        for col in type_overrides:
+            if col not in df.columns:
+                logger.warning(f"type_overrides column '{col}' not found in DataFrame, ignoring")
+
+        if not columns and not overrides:
             return PolarsCleaner.optimize_dtypes(df)
 
         row_count = len(df)
@@ -136,8 +151,10 @@ class PolarsCleaner:
             pl.col(col).is_not_null().sum().alias(col) for col in columns
         ]).row(0, named=True)
 
-        non_empty = [col for col in columns if non_null_counts[col] > 0]
-        empty_cols = [col for col in columns if non_null_counts[col] == 0]
+        # Overridden columns skip inference entirely
+        infer_candidates = [col for col in columns if col not in overrides]
+        non_empty = [col for col in infer_candidates if non_null_counts[col] > 0]
+        empty_cols = [col for col in infer_candidates if non_null_counts[col] == 0]
         for col in empty_cols:
             logger.info(f"{col} is empty, skipping cleaning")
         phase_duration = time.perf_counter() - phase_start
@@ -146,13 +163,14 @@ class PolarsCleaner:
             f"{len(empty_cols)} empty ({phase_duration:.2f}s)"
         )
 
-        if not non_empty:
+        if not non_empty and not overrides:
             return PolarsCleaner.optimize_dtypes(df)
 
         # --- Phase 2: build parse expressions for all non-empty columns ---
         phase_start = time.perf_counter()
         count_exprs = []
         column_info = {}  # col -> (bool_expr, num_expr, date_expr)
+        all_counts = {}
 
         for column in non_empty:
             original = pl.col(column)
@@ -191,12 +209,13 @@ class PolarsCleaner:
 
         # --- Phase 3: single scan to count parse successes ---
         phase_start = time.perf_counter()
-        try:
-            all_counts = df.select(count_exprs).row(0, named=True)
-        except Exception as e:
-            logger.debug(f"Batched count evaluation failed: {e}")
-            console.print(f"  [red]phase 3/4[/red] type probing FAILED: {e}")
-            return PolarsCleaner.optimize_dtypes(df)
+        if count_exprs:
+            try:
+                all_counts = df.select(count_exprs).row(0, named=True)
+            except Exception as e:
+                logger.debug(f"Batched count evaluation failed: {e}")
+                console.print(f"  [red]phase 3/4[/red] type probing FAILED: {e}")
+                all_counts = {}
 
         phase_duration = time.perf_counter() - phase_start
         console.print(f"  [cyan]phase 3/4[/cyan] type probing: ({phase_duration:.2f}s)")
@@ -204,9 +223,16 @@ class PolarsCleaner:
         # --- Phase 4: choose best parser per column and apply in a single pass ---
         phase_start = time.perf_counter()
         cleaning_expressions = []
-        type_decisions = {"bool": [], "num": [], "date": [], "string": [], "empty": []}
+        type_decisions = {"bool": [], "num": [], "date": [], "string": [], "empty": [], "override": []}
+
+        # Apply overrides first — direct cast, no inference
+        for column, target_dtype in overrides.items():
+            cleaning_expressions.append(pl.col(column).cast(target_dtype, strict=False).alias(column))
+            type_decisions["override"].append(column)
 
         for column in columns:
+            if column in overrides:
+                continue
             if column not in column_info:
                 # Empty column — keep as-is
                 cleaning_expressions.append(pl.col(column))
@@ -251,7 +277,7 @@ class PolarsCleaner:
         # Summarize decisions
         parts = []
         for kind, label in [("bool", "bool"), ("num", "numeric"), ("date", "date"),
-                            ("string", "string"), ("empty", "empty")]:
+                            ("string", "string"), ("empty", "empty"), ("override", "override")]:
             cols = type_decisions[kind]
             if cols:
                 parts.append(f"{len(cols)} {label}")
@@ -259,7 +285,8 @@ class PolarsCleaner:
             f"  [cyan]phase 4/4[/cyan] apply transforms: {', '.join(parts)} ({phase_duration:.2f}s)"
         )
         for kind, label in [("bool", "boolean"), ("num", "numeric"), ("date", "datetime"),
-                            ("string", "string (unchanged)"), ("empty", "empty (skipped)")]:
+                            ("string", "string (unchanged)"), ("empty", "empty (skipped)"),
+                            ("override", "override (user-specified)")]:
             cols = type_decisions[kind]
             if cols:
                 names = ", ".join(cols[:10])
@@ -267,7 +294,8 @@ class PolarsCleaner:
                 console.print(f"    {label}: {names}{suffix}")
 
         phase_start = time.perf_counter()
-        df = PolarsCleaner.optimize_dtypes(df)
+        override_cols = set(overrides.keys())
+        df = PolarsCleaner.optimize_dtypes(df, skip_columns=override_cols)
         phase_duration = time.perf_counter() - phase_start
         if phase_duration > 0.01:
             console.print(f"  [cyan]optimize_dtypes[/cyan]: ({phase_duration:.2f}s)")
@@ -276,10 +304,15 @@ class PolarsCleaner:
 
 
     @staticmethod
-    def clean_df(df: pl.DataFrame) -> pl.DataFrame:
+    def clean_df(
+        df: pl.DataFrame,
+        type_overrides: Optional[Dict[str, pl.DataType]] = None,
+    ) -> pl.DataFrame:
         """
         Comprehensive DataFrame cleaning - removes empty rows/columns and cleans all types.
         :param df: Polars DataFrame
+        :param type_overrides: Dict mapping column names to Polars DataTypes.
+               Overridden columns skip inference and are cast directly.
         :return: Cleaned DataFrame
         """
         # Remove columns that are all null — single scan for all columns
@@ -302,7 +335,7 @@ class PolarsCleaner:
             )
         df = df.select(keep_cols)
 
-        return PolarsCleaner.clean_all_types(df)
+        return PolarsCleaner.clean_all_types(df, type_overrides=type_overrides)
     
     @staticmethod
     def generate_hash_column(df: pl.DataFrame, columns_to_hash: List[str], new_column_name: str) -> pl.DataFrame:
@@ -352,13 +385,16 @@ class PolarsCleaner:
         return df
     
     @staticmethod
-    def optimize_dtypes(df: pl.DataFrame) -> pl.DataFrame:
+    def optimize_dtypes(df: pl.DataFrame, skip_columns: Optional[set] = None) -> pl.DataFrame:
         """
         Optimize data types for memory efficiency.
         :param df: Polars DataFrame
+        :param skip_columns: Set of column names to exclude from optimization
         :return: DataFrame with optimized data types
         """
-        int_cols = [col for col in df.columns if df[col].dtype == pl.Int64]
+        if skip_columns is None:
+            skip_columns = set()
+        int_cols = [col for col in df.columns if df[col].dtype == pl.Int64 and col not in skip_columns]
         if not int_cols:
             return df
 
