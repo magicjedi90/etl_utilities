@@ -1,16 +1,13 @@
-import logging
 import time
 from typing import Dict, List, Optional
 
 import polars as pl
-from rich.console import Console
 
 from .parser import PolarsParser
 from ..common.utils import standardize_column_name, compute_hash
+from ...logger import Logger
 
-# Set up logging
-logger = logging.getLogger(__name__)
-console = Console()
+logger = Logger().get_logger()
 
 
 class PolarsCleaner:
@@ -143,7 +140,7 @@ class PolarsCleaner:
 
         row_count = len(df)
         col_count = len(columns)
-        console.print(f"[bold]clean_all_types[/bold]: {row_count:,} rows x {col_count} columns")
+        logger.debug(f"clean_all_types: {row_count:,} rows x {col_count} columns")
 
         # --- Phase 1: single scan to find empty columns ---
         phase_start = time.perf_counter()
@@ -158,8 +155,8 @@ class PolarsCleaner:
         for col in empty_cols:
             logger.info(f"{col} is empty, skipping cleaning")
         phase_duration = time.perf_counter() - phase_start
-        console.print(
-            f"  [cyan]phase 1/4[/cyan] null scan: {len(non_empty)} non-empty, "
+        logger.debug(
+            f"  phase 1/4 null scan: {len(non_empty)} non-empty, "
             f"{len(empty_cols)} empty ({phase_duration:.2f}s)"
         )
 
@@ -202,8 +199,8 @@ class PolarsCleaner:
             ])
 
         phase_duration = time.perf_counter() - phase_start
-        console.print(
-            f"  [cyan]phase 2/4[/cyan] build expressions: "
+        logger.debug(
+            f"  phase 2/4 build expressions: "
             f"{len(count_exprs)} aggregations for {len(non_empty)} columns ({phase_duration:.2f}s)"
         )
 
@@ -214,11 +211,11 @@ class PolarsCleaner:
                 all_counts = df.select(count_exprs).row(0, named=True)
             except Exception as e:
                 logger.debug(f"Batched count evaluation failed: {e}")
-                console.print(f"  [red]phase 3/4[/red] type probing FAILED: {e}")
+                logger.error(f"  phase 3/4 type probing FAILED: {e}")
                 all_counts = {}
 
         phase_duration = time.perf_counter() - phase_start
-        console.print(f"  [cyan]phase 3/4[/cyan] type probing: ({phase_duration:.2f}s)")
+        logger.debug(f"  phase 3/4 type probing: ({phase_duration:.2f}s)")
 
         # --- Phase 4: choose best parser per column and apply in a single pass ---
         phase_start = time.perf_counter()
@@ -281,8 +278,8 @@ class PolarsCleaner:
             cols = type_decisions[kind]
             if cols:
                 parts.append(f"{len(cols)} {label}")
-        console.print(
-            f"  [cyan]phase 4/4[/cyan] apply transforms: {', '.join(parts)} ({phase_duration:.2f}s)"
+        logger.debug(
+            f"  phase 4/4 apply transforms: {', '.join(parts)} ({phase_duration:.2f}s)"
         )
         for kind, label in [("bool", "boolean"), ("num", "numeric"), ("date", "datetime"),
                             ("string", "string (unchanged)"), ("empty", "empty (skipped)"),
@@ -291,14 +288,14 @@ class PolarsCleaner:
             if cols:
                 names = ", ".join(cols[:10])
                 suffix = f" ... +{len(cols) - 10} more" if len(cols) > 10 else ""
-                console.print(f"    {label}: {names}{suffix}")
+                logger.debug(f"    {label}: {names}{suffix}")
 
         phase_start = time.perf_counter()
         override_cols = set(overrides.keys())
         df = PolarsCleaner.optimize_dtypes(df, skip_columns=override_cols)
         phase_duration = time.perf_counter() - phase_start
         if phase_duration > 0.01:
-            console.print(f"  [cyan]optimize_dtypes[/cyan]: ({phase_duration:.2f}s)")
+            logger.debug(f"  optimize_dtypes: ({phase_duration:.2f}s)")
 
         return df
 
@@ -318,8 +315,8 @@ class PolarsCleaner:
         # Remove columns that are all null — single scan for all columns
         if not df.columns:
             return df
-        console.print(
-            f"[bold]clean_df[/bold]: {len(df):,} rows x {len(df.columns)} columns"
+        logger.debug(
+            f"clean_df: {len(df):,} rows x {len(df.columns)} columns"
         )
         null_scan_start = time.perf_counter()
         has_data = df.select([
@@ -329,7 +326,7 @@ class PolarsCleaner:
         dropped_count = len(df.columns) - len(keep_cols)
         null_scan_duration = time.perf_counter() - null_scan_start
         if dropped_count:
-            console.print(
+            logger.debug(
                 f"  dropped {dropped_count} all-null column(s), "
                 f"{len(keep_cols)} remaining ({null_scan_duration:.2f}s)"
             )
