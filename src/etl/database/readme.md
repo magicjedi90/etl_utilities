@@ -75,6 +75,19 @@ mssql_loader.to_table()
 mssql_loader.to_table_fast(batch_size=500)
 ```
 
+#### Dialect-aware unified loader (incl. PostgreSQL)
+
+For a single loader that works across MSSQL, MariaDB/MySQL, and PostgreSQL, use
+`etl.database.unified_loader.Loader` with the matching dialect. It handles escaping,
+placeholders, and NaN/numpy down-casting per dialect, and exposes a single `insert()`:
+
+```python
+from etl.database.unified_loader import Loader
+from etl.database.sql_dialects import postgres  # or mssql / mariadb
+
+Loader(connection, df, schema="analytics", table="sales", dialect=postgres).insert()
+```
+
 ### 3. Validator Class
 
 The `Validator` class ensures that the DataFrame you are trying to upload is structured correctly to match the database schema.

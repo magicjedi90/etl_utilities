@@ -1,80 +1,158 @@
-# Project Documentation
+# etl_utilities
+
+A Python ETL framework for **data cleaning, type inference, SQL generation, and database loading** that works across three DataFrame backends (**Pandas, Polars, Spark**) and three database families (**MSSQL, MySQL/MariaDB, PostgreSQL**).
+
+It exists to remove the boilerplate from the boring-but-critical middle of a data pipeline: taking a messy extract, coercing every column to a sane type, generating a matching `CREATE TABLE`, and loading it efficiently — without hand-writing per-column casts or dialect-specific SQL.
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Classes](#classes)
-   - [Connector](#connector)
-   - [Loader](#loader)
-   - [MySqlLoader](#mysqlloader)
-   - [MsSqlLoader](#mssqlloader)
-   - [Parser](#parser)
-   - [Cleaner](#cleaner)
-   - [Creator](#creator)
-   - [Analyzer](#analyzer)
-   - [Validator](#validator)
-   - [MsSqlUpdater](#mssqlupdater)
-3. [Logging](#logging)
-4. [Additional Utilities](#additional-utilities)
+1. [Installation](#installation)
+2. [Quick Start — an end-to-end pipeline](#quick-start--an-end-to-end-pipeline)
+3. [Batch-safe cleaning for streaming (Polars)](#batch-safe-cleaning-for-streaming-polars)
+4. [Reconciling mismatched Parquet schemas](#reconciling-mismatched-parquet-schemas)
+5. [Backends & databases](#backends--databases)
+6. [Class reference](#class-reference)
+7. [Package documentation](#package-documentation)
+8. [Logging](#logging)
+9. [License](#license)
 
-## Overview
+## Installation
 
-This project provides a comprehensive Data ETL \(Extract, Transform, Load\) and data manipulation framework using Python. It integrates with databases using SQLAlchemy and provides tools for data parsing, cleaning, loading, validating, and more. The project is structured with classes that encapsulate different functionalities.
+```bash
+pip install etl_utilities
+```
 
-## Classes
+The core install pulls in `pandas`, `polars`, `pyarrow`, `numpy`, `SQLAlchemy`, `psycopg2-binary`, and `pyspark`.
 
-### Connector
+## Quick Start — an end-to-end pipeline
 
-The `Connector` class handles creating connections to various types of databases \(MSSQL, PostgreSQL, MySQL\) using SQLAlchemy. It provides static methods for obtaining both trusted and user connections.
+Take a messy CSV export, clean it, generate a Postgres table from the inferred schema, and load it:
 
-**Key Methods:**
-- `get_mssql_trusted_connection`
-- `get_mssql_user_connection`
-- `get_postgres_user_connection`
-- `get_mysql_user_connection`
-- Instance methods for returning database connections based on stored configuration.
+```python
+import pandas as pd
 
-### Loader
+from etl.dataframe.cleaner import Cleaner
+from etl.query.creator import Creator
+from etl.database.sql_dialects import postgres
+from etl.database.connector import Connector
+from etl.database.unified_loader import Loader
 
-The `Loader` class is responsible for loading data from a Pandas DataFrame into a database. It manages the insertion process, ensuring data is inserted efficiently and effectively with the use of SQLAlchemy and custom logging.
+# 1. EXTRACT — read a messy upstream export
+raw = pd.read_csv("sales_export.csv")
 
-### MySqlLoader
+# 2. TRANSFORM — standardize column names (in place) and coerce types
+Cleaner.column_names_to_snake_case(raw)        # "Order ID" -> "order_id"
+clean = Cleaner.clean_df(raw)                   # drop empty rows/cols + infer bool/int/float/date
 
-A slight extension of the `Loader` class specifically for MySQL databases. It provides overrides to manage MySQL-specific data types and query formatting.
+# 3. GENERATE DDL — a CREATE TABLE matching the cleaned frame's inferred schema
+ddl = Creator.create_table(
+    clean,
+    schema_name="analytics",
+    table_name="sales",
+    dialect=postgres,
+    primary_key_column="order_id",
+)
 
-### MsSqlLoader
+# 4. LOAD — open a connection and bulk-insert
+connection = Connector(
+    host="localhost", port=5432, instance="",
+    database="warehouse", username="etl", password="***",
+).to_user_postgres()
 
-A specialized loader for loading data into MSSQL databases with additional functionalities like fast insertions using bulk methods.
+connection.execute(ddl)
+Loader(connection, clean, schema="analytics", table="sales", dialect=postgres).insert()
+```
 
-### Parser
+Swap `postgres` for `mssql` or `mariadb` (from `etl.database.sql_dialects`) and the generated DDL and the loader's placeholders/escaping change with it — the rest of the pipeline is identical.
 
-The `Parser` class consists of a series of static methods dedicated to parsing various data types—boolean, float, date, and integer. These methods are essential for data type conversion and consistency across the application.
+## Batch-safe cleaning for streaming (Polars)
 
-### Cleaner
+Per-frame type inference is correct for one in-memory table but **breaks batch-by-batch**: batch A might infer `Boolean`/`Int8` while batch B infers `String`/`Int32`, and any downstream concat / Parquet-dataset / DB append then rejects the schema mismatch.
 
-The `Cleaner` class provides methods for sanitizing and formatting data in a DataFrame. It includes functions for setting column name casing conventions, cleaning various types of data, and preparing data for reliable analysis and insertion.
+`PolarsCleaner` solves this by separating **inference** (decide the plan once) from **application** (apply identically to every batch):
 
-### Creator
+```python
+from etl.dataframe.polars.cleaner import PolarsCleaner
 
-This class deals with generating SQL `CREATE TABLE` statements for different databases like MSSQL and MariaDB. The query generation considers data types deduced from DataFrame content.
+# Infer a deterministic plan once, from a representative sample.
+# prefer_float keeps numeric columns stable even if a later batch turns out fractional.
+plan = PolarsCleaner.infer_cleaning_plan(sample_df, prefer_float=True)
 
-### Analyzer
+for batch in stream:                                  # every batch gets the SAME schema
+    batch = PolarsCleaner.apply_cleaning_plan(batch, plan)
+    sink.write(batch)
+```
 
-The `Analyzer` class assesses DataFrame characteristics and helps identify unique columns, column pairs, empty columns, and more. It aids in generating metadata for data types, which is crucial for creating or validating schemas.
+For one-shot in-memory cleaning, the original `PolarsCleaner.clean_all_types(df)` / `clean_df(df)` still do everything in a single pass.
 
-### Validator
+A few more schema-stability helpers, useful right before a strict sink (Delta/Parquet/warehouse append):
 
-The `Validator` class ensures DataFrame compatibility with the target database table structure by checking for extra columns, validating data types, and ensuring that no data truncation will occur during upload.
+```python
+df = PolarsCleaner.sanitize_float_columns(df)      # NaN / +-Inf (and "NaN"/"Infinity" strings) -> null
+df = PolarsCleaner.localize_naive_datetimes(df)    # naive Datetime -> tz-aware (UTC by default)
+df = PolarsCleaner.cast_null_columns(df)           # all-null (pl.Null) columns -> a concrete dtype
+df = PolarsCleaner.clean_df(df, drop_all_null_columns=False)  # keep all-null columns for schema parity
 
-### MsSqlUpdater
+# Collision-safe snake_case: when two source columns normalize to the same name,
+# coalesce them (default), or pass on_collision="error" / "suffix".
+df = PolarsCleaner.column_names_to_snake_case(df)
+```
 
-A class designed for constructing SQL statements for operations like mergers, updates, inserts, and appends to manage data transitions between tables efficiently.
+## Reconciling mismatched Parquet schemas
+
+A pile of Parquet files with the same logical columns but incompatible physical types
+(`Decimal(38,12)` vs `Decimal(38,13)`, string-vs-decimal) defeats `pl.scan_parquet([...])`
+and `pa.unify_schemas(...)` alike. `unify_parquet_schemas` reads only the footers (concurrently)
+and builds one schema every file can be **cast** to on read:
+
+```python
+import pyarrow.dataset as ds
+from etl.io.arrow_schema import unify_parquet_schemas
+
+unified = unify_parquet_schemas(parquet_paths)         # any decimal -> float64; cross-file conflict -> large_string
+table = ds.dataset(parquet_paths, schema=unified).to_table()   # PyArrow casts on read
+```
+
+Combine the three: `unify schemas → stream batches → apply_cleaning_plan` rebuilds a full
+schema-stable, memory-safe cleaning pipeline from library primitives alone.
+
+## Backends & databases
+
+| DataFrame backend | Module | Notes |
+|---|---|---|
+| Pandas | `etl.dataframe.cleaner` / `parser` / `analyzer` | Eager, the most complete implementation |
+| Polars | `etl.dataframe.polars` | Expression-based; adds the batch-safe streaming API above |
+| Spark | `etl.dataframe.spark` | Distributed; native Spark SQL (no Python UDFs), sampling-based inference |
+
+All backends follow the same type-narrowing order: **Boolean → Integer → Float → Date → String**.
+
+Database dialects (`etl.database.sql_dialects`): `mssql`, `mariadb`, `postgres` — each defines its own
+escaping, type mapping, placeholders, and constraint syntax, consumed by the `Creator` and `Loader`.
+
+## Class reference
+
+- **Connector** — SQLAlchemy connection factory for MSSQL (trusted/user), PostgreSQL, and MySQL.
+- **Loader** (`unified_loader`) — dialect-aware `INSERT` loader from a DataFrame; `MsSqlLoader` / `MySqlLoader` add backend-specific optimizations (e.g. `fast_executemany`).
+- **Parser** — static type parsers (boolean, float, date, integer) shared by the cleaners.
+- **Cleaner** / **PolarsCleaner** — column-name normalization plus value cleaning and type inference.
+- **Creator** — generates `CREATE TABLE` DDL from a DataFrame's analyzed schema for any dialect.
+- **Analyzer** — finds unique columns/pairs, empty and categorical columns, and column metadata.
+- **Validator** — pre-upload checks: extra columns, type mismatches, truncation detection.
+- **MsSqlUpdater** — builds `MERGE` / `UPSERT` / `APPEND` SQL between source and target tables.
+
+## Package documentation
+
+Each subpackage has its own focused README:
+
+- [`src/etl/dataframe/readme.md`](src/etl/dataframe/readme.md) — Analyzer, Cleaner, Parser across the Pandas/Polars/Spark backends.
+- [`src/etl/database/readme.md`](src/etl/database/readme.md) — Connector, Loaders, Validator.
+- [`src/etl/query/readme.md`](src/etl/query/readme.md) — Creator and MsSqlUpdater SQL generation.
 
 ## Logging
 
-The project uses a singleton `Logger` class with colored output format for console logging. This helps in debugging and understanding the flow by logging messages at various severity levels.
+The project uses a singleton `Logger` (`etl.logger.Logger`) with colored Rich output and dual
+stdout/stderr streams, so cleaning/loading steps emit readable, level-appropriate progress.
 
-## Additional Utilities
+## License
 
-- **Parsing and Cleaning Functions:** Utility functions for parsing and cleaning various data types.
-- **Standardization:** A set of utility functions to standardize and clean DataFrame column names and content.
+MIT — see [`LICENSE`](LICENSE).

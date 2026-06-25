@@ -42,7 +42,7 @@ All source code lives under `src/etl/`. The package is importable as `etl`.
 
 `src/etl/dataframe/` has parallel implementations for each backend:
 - **`pandas/`** — Eager evaluation, the original and most complete implementation
-- **`polars/`** — Expression-based, uses Polars lazy evaluation patterns
+- **`polars/`** — Expression-based, uses Polars lazy evaluation patterns. `PolarsCleaner` (`cleaner.py`) is a thin static-method **facade** over focused modules: `column_names.py` (snake/Pascal case), `type_cleaning.py` (`clean_numbers/dates/bools`, `clean_all_types`, `clean_df` — the one-shot in-memory path), `cleaning_plan.py` (the **batch-safe streaming API**: `infer_cleaning_plan` decides a deterministic `column -> dtype-kind` plan once, `apply_cleaning_plan` applies it identically to every batch), `schema_tools.py` (`optimize_dtypes`, `sanitize_float_columns`, `localize_naive_datetimes`/`to_utc_datetimes`, `cast_null_columns`), and `column_ops.py` (`coalesce_columns`, `generate_hash_column`). New code may call the module functions directly; the facade preserves the historical `PolarsCleaner.X(...)` API. Collision-safe `column_names_to_snake_case(on_collision=)` and `clean_df(drop_all_null_columns=)` are opt-in flags
 - **`spark/`** — Distributed processing, uses native Spark SQL operations (no Python UDFs for performance). Has its own modular subsystem: `type_parsers.py`, `type_checkers.py`, `type_inference.py`, `diagnostics.py`, `config.py`
 
 **Backwards compatibility:** `src/etl/dataframe/__init__.py` re-exports `Cleaner`, `Parser`, `Analyzer` from the `pandas/` subpackage. Legacy code using `from etl.dataframe import Cleaner` continues to work.
@@ -54,6 +54,10 @@ All source code lives under `src/etl/`. The package is importable as `etl`.
 - **`unified_loader.py`** — Dialect-aware INSERT loader; `mssql_loader.py` and `mysql_loader.py` provide database-specific optimizations
 - **`validator.py`** — Pre-upload validation (extra columns, type mismatches, truncation detection)
 - **`creator.py` / `query/creator.py`** — SQL CREATE TABLE generation from DataFrame analysis
+
+### I/O Layer (`src/etl/io/`)
+
+- **`arrow_schema.py`** — `unify_parquet_schemas(paths)` reads Parquet footers only (concurrently) and reconciles incompatible physical types across files into one castable PyArrow schema (any decimal → `float64`; any cross-file type conflict → `large_string`). Pass the result as `ds.dataset(paths, schema=...)` to cast on read. Requires `pyarrow`.
 
 ### Type Inference Hierarchy
 

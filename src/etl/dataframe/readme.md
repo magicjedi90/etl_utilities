@@ -1,6 +1,15 @@
 # Data Processing Library
 
-These modules provide tools for data analysis and cleaning, specifically focused on handling pandas DataFrames. It consists of three main components: the `Analyzer`, `Cleaner`, and `Parser` modules.
+These modules provide tools for data analysis and cleaning. The `Analyzer`, `Cleaner`,
+and `Parser` documented here are the **Pandas** backend (`etl.dataframe`), which is the
+original and most complete implementation. Two parallel backends share the same API shape:
+
+- **Polars** (`etl.dataframe.polars`) — expression-based, and the only backend with a
+  batch-safe streaming API. See [Polars backend](#polars-backend) below.
+- **Spark** (`etl.dataframe.spark`) — distributed, native Spark SQL with sampling-based
+  inference. See [Spark backend](#spark-backend) below.
+
+All backends follow the same type-narrowing order: **Boolean → Integer → Float → Date → String**.
 
 ## Table of Contents
 - [Analyzer Module](#analyzer-module)
@@ -19,6 +28,8 @@ These modules provide tools for data analysis and cleaning, specifically focused
   - [parse_float](#parse_float)
   - [parse_date](#parse_date)
   - [parse_integer](#parse_integer)
+- [Polars backend](#polars-backend)
+- [Spark backend](#spark-backend)
 
 ## Analyzer Module
 
@@ -156,3 +167,61 @@ Attempts to parse a value into an integer.
 int_value = Parser.parse_integer("123")
 print(int_value)
 ```
+
+## Polars backend
+
+`etl.dataframe.polars` provides `PolarsCleaner` and `PolarsParser`. The one-shot methods
+mirror the Pandas `Cleaner` — `column_names_to_snake_case`, `clean_numbers`, `clean_dates`,
+`clean_bools`, `clean_all_types`, `clean_df`, `coalesce_columns`, `generate_hash_column`,
+`optimize_dtypes` — but operate on `polars.DataFrame` using Polars expressions.
+
+```python
+import polars as pl
+from etl.dataframe.polars.cleaner import PolarsCleaner
+
+df = pl.read_csv("export.csv")
+df = PolarsCleaner.column_names_to_snake_case(df)
+df = PolarsCleaner.clean_df(df)            # one-shot: drop empty columns + infer types
+```
+
+### Batch-safe / streaming API
+
+Per-frame inference is unstable across batches (batch A infers `Int8`, batch B infers
+`String`, and the append fails). Split **inference** from **application** so every batch
+lands on the same schema:
+
+```python
+plan = PolarsCleaner.infer_cleaning_plan(sample_df, prefer_float=True)
+for batch in stream:
+    batch = PolarsCleaner.apply_cleaning_plan(batch, plan)   # identical schema every time
+    sink.write(batch)
+```
+
+- `infer_cleaning_plan(df, columns=None, threshold=1.0, prefer_float=False)` returns a
+  `column -> dtype-kind` dict (`"boolean" | "int64" | "float64" | "datetime" | "utf8" | "keep"`).
+- `apply_cleaning_plan(df, plan, optimize=False)` applies it deterministically (every cast is
+  `strict=False`, so dirty values become null rather than raising).
+
+### Schema-stability helpers
+
+Useful right before a strict sink (Delta/Parquet/warehouse append):
+
+- `sanitize_float_columns(df)` — NaN/±Infinity (native floats **and** `"NaN"`/`"Infinity"` string literals) → null.
+- `localize_naive_datetimes(df, tz="UTC")` — naive `Datetime` columns → tz-aware (alias: `to_utc_datetimes`).
+- `cast_null_columns(df, to=pl.Utf8)` — all-null `pl.Null` columns → a concrete dtype.
+- `clean_df(df, drop_all_null_columns=False)` — keep all-null columns so the schema stays constant across files.
+- `column_names_to_snake_case(df, on_collision="coalesce")` — handle names that normalize to the
+  same snake_case (`"coalesce"` merges them, `"error"` raises, `"suffix"` disambiguates with `_2`, `_3`, …).
+- `generate_hash_column(df, cols, name, algorithm="sha1")` — `"sha1"` (default, stable hex digest) or
+  `"xxhash"` (vectorized `UInt64`, much faster for in-run dedup).
+
+For reconciling mismatched Parquet schemas across many files, see
+[`etl.io.arrow_schema.unify_parquet_schemas`](../io/arrow_schema.py).
+
+## Spark backend
+
+`etl.dataframe.spark` provides a distributed `Cleaner` built on native Spark SQL (no Python
+UDFs, for performance), with a modular subsystem: `type_parsers`, `type_checkers`,
+`type_inference`, `diagnostics`, and `config`. Inference is sampling-based with automatic
+retry and type broadening, uses `DoubleType` (64-bit) for financial precision, and normalizes
+all timestamps to UTC. The public cleaning surface mirrors the Pandas/Polars backends.

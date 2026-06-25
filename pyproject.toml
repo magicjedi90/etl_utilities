@@ -5,16 +5,16 @@ build-backend = "hatchling.build"
 [project]
 name = "etl_utilities"
 dynamic = ["version"]
-description = 'This repository provides a collection of utility functions and classes for data cleaning, SQL query generation, and data analysis. The code is written in Python and uses libraries such as `pandas`, `numpy`, and `dateutil`.'
+description = 'An ETL framework for data cleaning, type inference, SQL generation, and database loading across Pandas, Polars, and Spark DataFrames and MSSQL, MySQL/MariaDB, and PostgreSQL backends.'
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
-keywords = ["etl", "pandas", "cleaning", "etl-utilities", "utilities", "database", "dataframe", "spark"]
+keywords = ["etl", "pandas", "polars", "spark", "cleaning", "etl-utilities", "utilities", "database", "dataframe", "parquet"]
 authors = [
     { name = "Jesse", email = "magicjedi90@aim.com" },
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -29,6 +29,7 @@ dependencies = [
     "numpy",
     "pandas",
     "polars",
+    "pyarrow",
     "python_dateutil",
     "SQLAlchemy",
     "rich",

@@ -1,439 +1,65 @@
-import time
-from typing import Dict, List, Optional
+# src/etl/dataframe/polars/cleaner.py
+"""PolarsCleaner — the public facade over the Polars cleaning helpers.
 
-import polars as pl
+The implementations live in focused, independently-importable modules:
+    column_names.py   — snake_case / PascalCase normalization
+    type_cleaning.py  — clean_numbers/dates/bools, clean_all_types, clean_df
+    cleaning_plan.py  — batch-safe infer_cleaning_plan / apply_cleaning_plan
+    schema_tools.py   — optimize_dtypes, sanitize_float_columns,
+                        localize_naive_datetimes, cast_null_columns
+    column_ops.py     — coalesce_columns, generate_hash_column
 
-from .parser import PolarsParser
-from ..common.utils import standardize_column_name, compute_hash
-from ...logger import Logger
-
-logger = Logger().get_logger()
+`PolarsCleaner` re-exposes them as static methods so the historical
+``PolarsCleaner.clean_df(df)`` style API keeps working unchanged. New code may
+call the module functions directly.
+"""
+from .cleaning_plan import apply_cleaning_plan, infer_cleaning_plan
+from .column_names import column_names_to_pascal_case, column_names_to_snake_case
+from .column_ops import coalesce_columns, generate_hash_column
+from .schema_tools import (
+    cast_null_columns,
+    localize_naive_datetimes,
+    optimize_dtypes,
+    sanitize_float_columns,
+)
+from .type_cleaning import (
+    clean_all_types,
+    clean_bools,
+    clean_dates,
+    clean_df,
+    clean_numbers,
+)
 
 
 class PolarsCleaner:
     """
-    This class provides static methods for data cleaning operations on a Polars DataFrame.
-    Optimized for Polars' lazy evaluation and expression system.
+    Static-method facade for data cleaning operations on a Polars DataFrame.
+    Optimized for Polars' lazy evaluation and expression system. Each method
+    delegates to a function in one of the sibling modules listed above.
     """
-    
-    @staticmethod
-    def column_names_to_snake_case(df: pl.DataFrame) -> pl.DataFrame:
-        """
-        Convert column names to snake_case format.
-        :param df: Polars DataFrame
-        :return: DataFrame with standardized column names
-        """
-        new_columns = [standardize_column_name(name) for name in df.columns]
-        return df.rename(dict(zip(df.columns, new_columns)))
-    
-    @staticmethod
-    def column_names_to_pascal_case(df: pl.DataFrame) -> pl.DataFrame:
-        """
-        Convert column names to PascalCase format.
-        :param df: Polars DataFrame
-        :return: DataFrame with PascalCase column names
-        """
-        new_columns = ["".join(standardize_column_name(name).title().split('_')) 
-                      for name in df.columns]
-        return df.rename(dict(zip(df.columns, new_columns)))
 
+    # column-name normalization
+    column_names_to_snake_case = staticmethod(column_names_to_snake_case)
+    column_names_to_pascal_case = staticmethod(column_names_to_pascal_case)
 
-    @staticmethod
-    def clean_numbers(df: pl.DataFrame, columns: Optional[List[str]] = None) -> pl.DataFrame:
-        """
-        Clean numeric columns by parsing floats and integers.
-        :param df: Polars DataFrame
-        :param columns: List of columns to clean (if None, clean all columns)
-        :return: DataFrame with cleaned numeric columns
-        """
-        if columns is None:
-            columns = df.columns
+    # value cleaning + one-shot type inference
+    clean_numbers = staticmethod(clean_numbers)
+    clean_dates = staticmethod(clean_dates)
+    clean_bools = staticmethod(clean_bools)
+    clean_all_types = staticmethod(clean_all_types)
+    clean_df = staticmethod(clean_df)
 
-        for column in columns:
-            try:
-                # Use the parse_integer_expr from PolarsParser which handles
-                # float cleaning and integer conversion for whole numbers
-                df = df.with_columns(
-                    PolarsParser.parse_integer_expr(column).alias(column)
-                )
-            except Exception as e:
-                logger.debug(f"Column {column} could not be cleaned as number: {e}")
+    # batch-safe / streaming cleaning
+    infer_cleaning_plan = staticmethod(infer_cleaning_plan)
+    apply_cleaning_plan = staticmethod(apply_cleaning_plan)
 
-        return df
-    
-    @staticmethod
-    def clean_dates(df: pl.DataFrame, columns: Optional[List[str]] = None) -> pl.DataFrame:
-        """
-        Clean date columns by parsing various date formats.
-        :param df: Polars DataFrame
-        :param columns: List of columns to clean (if None, clean all columns)
-        :return: DataFrame with cleaned date columns
-        """
-        if columns is None:
-            columns = df.columns
-        
-        for column in columns:
-            try:
-                df = df.with_columns(
-                    PolarsParser.parse_date_expr(column)
-                    .alias(column)
-                )
-            except Exception as e:
-                logger.debug(f"Column {column} could not be cleaned as date: {e}")
-        
-        return df
-    
-    @staticmethod
-    def clean_bools(df: pl.DataFrame, columns: Optional[List[str]] = None) -> pl.DataFrame:
-        """
-        Clean boolean columns by parsing various truthy/falsy values.
-        :param df: Polars DataFrame
-        :param columns: List of columns to clean (if None, clean all columns)
-        :return: DataFrame with cleaned boolean columns
-        """
-        if columns is None:
-            columns = df.columns
-        
-        for column in columns:
-            try:
-                df = df.with_columns(
-                    PolarsParser.parse_boolean_expr(column)
-                    .alias(column)
-                )
-            except Exception as e:
-                logger.debug(f"Column {column} could not be cleaned as boolean: {e}")
-        
-        return df
+    # dtype / schema stabilizers
+    optimize_dtypes = staticmethod(optimize_dtypes)
+    sanitize_float_columns = staticmethod(sanitize_float_columns)
+    localize_naive_datetimes = staticmethod(localize_naive_datetimes)
+    to_utc_datetimes = staticmethod(localize_naive_datetimes)  # back-compat alias
+    cast_null_columns = staticmethod(cast_null_columns)
 
-    @staticmethod
-    def clean_all_types(
-        df: pl.DataFrame,
-        columns: Optional[List[str]] = None,
-        type_overrides: Optional[Dict[str, pl.DataType]] = None,
-    ) -> pl.DataFrame:
-        """
-        Perform comprehensive cleaning on all columns by trying different parsing functions.
-        Strategy:
-        - Build safe expressions for bool, number, and date that return None for incompatible values.
-        - Coalesce them in priority order, falling back to the original value to avoid data loss.
-        - Apply for all target columns in a single pass for efficiency.
-        :param df: Polars DataFrame
-        :param columns: List of columns to clean (if None, clean all columns)
-        :param type_overrides: Dict mapping column names to Polars DataTypes.
-               Overridden columns skip inference and are cast directly.
-        :return: DataFrame with all columns cleaned
-        """
-        if columns is None:
-            columns = df.columns
-
-        if type_overrides is None:
-            type_overrides = {}
-
-        # Filter out overrides for columns not present in the DataFrame
-        overrides = {col: dtype for col, dtype in type_overrides.items() if col in df.columns}
-        for col in type_overrides:
-            if col not in df.columns:
-                logger.warning(f"type_overrides column '{col}' not found in DataFrame, ignoring")
-
-        if not columns and not overrides:
-            return PolarsCleaner.optimize_dtypes(df)
-
-        row_count = len(df)
-        col_count = len(columns)
-        logger.debug(f"clean_all_types: {row_count:,} rows x {col_count} columns")
-
-        # --- Phase 1: single scan to find empty columns ---
-        phase_start = time.perf_counter()
-        non_null_counts = df.select([
-            pl.col(col).is_not_null().sum().alias(col) for col in columns
-        ]).row(0, named=True)
-
-        # Overridden columns skip inference entirely
-        infer_candidates = [col for col in columns if col not in overrides]
-        non_empty = [col for col in infer_candidates if non_null_counts[col] > 0]
-        empty_cols = [col for col in infer_candidates if non_null_counts[col] == 0]
-        for col in empty_cols:
-            logger.info(f"{col} is empty, skipping cleaning")
-        phase_duration = time.perf_counter() - phase_start
-        logger.debug(
-            f"  phase 1/4 null scan: {len(non_empty)} non-empty, "
-            f"{len(empty_cols)} empty ({phase_duration:.2f}s)"
-        )
-
-        if not non_empty and not overrides:
-            return PolarsCleaner.optimize_dtypes(df)
-
-        # --- Phase 2: build parse expressions for all non-empty columns ---
-        phase_start = time.perf_counter()
-        count_exprs = []
-        column_info = {}  # col -> (bool_expr, num_expr, date_expr)
-        all_counts = {}
-
-        for column in non_empty:
-            original = pl.col(column)
-            # Treat empty or whitespace-only strings as nulls for the purpose of
-            # determining if a parser covers all meaningful values. This allows
-            # columns with empty strings to still be cast to their numeric/date/bool
-            # dtypes while preserving empties as nulls.
-            original_utf8 = original.cast(pl.Utf8, strict=False)
-            original_stripped = original_utf8.str.strip_chars()
-            effective_original = (
-                pl.when(original_stripped == "")
-                .then(None)
-                .otherwise(original)
-            )
-            bool_expr = PolarsParser.parse_boolean_expr(column)
-            num_expr = PolarsParser.parse_integer_expr(column)
-            # Use fast vectorized date parsing for both counting and application.
-            # Date only wins when date_cnt == original_count, meaning vectorized
-            # already parsed everything — no need for the expensive dateutil fallback.
-            date_expr = PolarsParser.parse_date_expr_vectorized(column)
-
-            column_info[column] = (bool_expr, num_expr, date_expr)
-
-            count_exprs.extend([
-                effective_original.is_not_null().sum().alias(f"{column}__orig"),
-                bool_expr.is_not_null().sum().alias(f"{column}__bool"),
-                num_expr.is_not_null().sum().alias(f"{column}__num"),
-                date_expr.is_not_null().sum().alias(f"{column}__date"),
-            ])
-
-        phase_duration = time.perf_counter() - phase_start
-        logger.debug(
-            f"  phase 2/4 build expressions: "
-            f"{len(count_exprs)} aggregations for {len(non_empty)} columns ({phase_duration:.2f}s)"
-        )
-
-        # --- Phase 3: single scan to count parse successes ---
-        phase_start = time.perf_counter()
-        if count_exprs:
-            try:
-                all_counts = df.select(count_exprs).row(0, named=True)
-            except Exception as e:
-                logger.debug(f"Batched count evaluation failed: {e}")
-                logger.error(f"  phase 3/4 type probing FAILED: {e}")
-                all_counts = {}
-
-        phase_duration = time.perf_counter() - phase_start
-        logger.debug(f"  phase 3/4 type probing: ({phase_duration:.2f}s)")
-
-        # --- Phase 4: choose best parser per column and apply in a single pass ---
-        phase_start = time.perf_counter()
-        cleaning_expressions = []
-        type_decisions = {"bool": [], "num": [], "date": [], "string": [], "empty": [], "override": []}
-
-        # Apply overrides first — direct cast, no inference
-        for column, target_dtype in overrides.items():
-            cleaning_expressions.append(pl.col(column).cast(target_dtype, strict=False).alias(column))
-            type_decisions["override"].append(column)
-
-        for column in columns:
-            if column in overrides:
-                continue
-            if column not in column_info:
-                # Empty column — keep as-is
-                cleaning_expressions.append(pl.col(column))
-                type_decisions["empty"].append(column)
-                continue
-
-            original_count = all_counts[f"{column}__orig"]
-            bool_count = all_counts[f"{column}__bool"]
-            numeric_count = all_counts[f"{column}__num"]
-            date_count = all_counts[f"{column}__date"]
-
-            bool_expr, num_expr, date_expr = column_info[column]
-
-            # Choose the best parser among bool/num/date based on highest non-null count
-            # Tie-breaker priority: bool > num > date
-            candidates = [
-                (bool_count, 'bool'),
-                (numeric_count, 'num'),
-                (date_count, 'date'),
-            ]
-            # Sort by count desc, then by priority order as listed
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            top_count, top_kind = candidates[0]
-            # For now only convert if all elements are cleaned - potentially add in a threshold later
-            if top_count == original_count and top_count > 0:
-                if top_kind == 'bool':
-                    chosen = bool_expr
-                elif top_kind == 'num':
-                    chosen = num_expr
-                else:
-                    chosen = date_expr
-                type_decisions[top_kind].append(column)
-            else:
-                chosen = pl.col(column)
-                type_decisions["string"].append(column)
-
-            cleaning_expressions.append(chosen.alias(column))
-
-        df = df.with_columns(cleaning_expressions)
-        phase_duration = time.perf_counter() - phase_start
-
-        # Summarize decisions
-        parts = []
-        for kind, label in [("bool", "bool"), ("num", "numeric"), ("date", "date"),
-                            ("string", "string"), ("empty", "empty"), ("override", "override")]:
-            cols = type_decisions[kind]
-            if cols:
-                parts.append(f"{len(cols)} {label}")
-        logger.debug(
-            f"  phase 4/4 apply transforms: {', '.join(parts)} ({phase_duration:.2f}s)"
-        )
-        for kind, label in [("bool", "boolean"), ("num", "numeric"), ("date", "datetime"),
-                            ("string", "string (unchanged)"), ("empty", "empty (skipped)"),
-                            ("override", "override (user-specified)")]:
-            cols = type_decisions[kind]
-            if cols:
-                names = ", ".join(cols[:10])
-                suffix = f" ... +{len(cols) - 10} more" if len(cols) > 10 else ""
-                logger.debug(f"    {label}: {names}{suffix}")
-
-        phase_start = time.perf_counter()
-        override_cols = set(overrides.keys())
-        df = PolarsCleaner.optimize_dtypes(df, skip_columns=override_cols)
-        phase_duration = time.perf_counter() - phase_start
-        if phase_duration > 0.01:
-            logger.debug(f"  optimize_dtypes: ({phase_duration:.2f}s)")
-
-        return df
-
-
-    @staticmethod
-    def clean_df(
-        df: pl.DataFrame,
-        type_overrides: Optional[Dict[str, pl.DataType]] = None,
-    ) -> pl.DataFrame:
-        """
-        Comprehensive DataFrame cleaning - removes empty rows/columns and cleans all types.
-        :param df: Polars DataFrame
-        :param type_overrides: Dict mapping column names to Polars DataTypes.
-               Overridden columns skip inference and are cast directly.
-        :return: Cleaned DataFrame
-        """
-        # Remove columns that are all null — single scan for all columns
-        if not df.columns:
-            return df
-        logger.debug(
-            f"clean_df: {len(df):,} rows x {len(df.columns)} columns"
-        )
-        null_scan_start = time.perf_counter()
-        has_data = df.select([
-            pl.col(col).is_not_null().any() for col in df.columns
-        ]).row(0)
-        keep_cols = [col for col, keep in zip(df.columns, has_data) if keep]
-        dropped_count = len(df.columns) - len(keep_cols)
-        null_scan_duration = time.perf_counter() - null_scan_start
-        if dropped_count:
-            logger.debug(
-                f"  dropped {dropped_count} all-null column(s), "
-                f"{len(keep_cols)} remaining ({null_scan_duration:.2f}s)"
-            )
-        df = df.select(keep_cols)
-
-        return PolarsCleaner.clean_all_types(df, type_overrides=type_overrides)
-    
-    @staticmethod
-    def generate_hash_column(df: pl.DataFrame, columns_to_hash: List[str], new_column_name: str) -> pl.DataFrame:
-        """
-        Generate a hash column based on specified columns.
-        :param df: Polars DataFrame
-        :param columns_to_hash: List of column names to include in hash
-        :param new_column_name: Name for the new hash column
-        :return: DataFrame with added hash column
-        """
-        # Validate inputs
-        if not columns_to_hash:
-            raise ValueError("columns_to_hash cannot be empty")
-        
-        missing_cols = [col for col in columns_to_hash if col not in df.columns]
-        if missing_cols:
-            raise ValueError(f"Columns not found in DataFrame: {missing_cols}")
-        
-        if new_column_name in df.columns:
-            raise ValueError(f"Column '{new_column_name}' already exists in DataFrame")
-        
-        # Use map_elements instead of deprecated apply
-        hash_expr = pl.concat_str([pl.col(col).cast(pl.Utf8) for col in columns_to_hash]).map_elements(
-            compute_hash, 
-            return_dtype=pl.Utf8
-        )
-        return df.with_columns(hash_expr.alias(new_column_name))
-    
-    @staticmethod
-    def coalesce_columns(df: pl.DataFrame, columns_to_coalesce: List[str], target_column: str, drop: bool = False) -> pl.DataFrame:
-        """
-        Coalesce multiple columns into one, taking the first non-null value.
-        :param df: Polars DataFrame
-        :param columns_to_coalesce: List of column names to coalesce
-        :param target_column: Name for the coalesced column
-        :param drop: Whether to drop the original columns
-        :return: DataFrame with coalesced column
-        """
-        # Use coalesce function
-        coalesce_expr = pl.coalesce([pl.col(col) for col in columns_to_coalesce])
-        df = df.with_columns(coalesce_expr.alias(target_column))
-        
-        if drop:
-            cols_to_drop = [col for col in columns_to_coalesce if col != target_column]
-            df = df.drop(cols_to_drop)
-        
-        return df
-    
-    @staticmethod
-    def optimize_dtypes(df: pl.DataFrame, skip_columns: Optional[set] = None) -> pl.DataFrame:
-        """
-        Optimize data types for memory efficiency.
-        :param df: Polars DataFrame
-        :param skip_columns: Set of column names to exclude from optimization
-        :return: DataFrame with optimized data types
-        """
-        if skip_columns is None:
-            skip_columns = set()
-        int_cols = [col for col in df.columns if df[col].dtype == pl.Int64 and col not in skip_columns]
-        if not int_cols:
-            return df
-
-        # Compute min/max for all integer columns in a single pass
-        agg_exprs = []
-        for col in int_cols:
-            agg_exprs.extend([
-                pl.col(col).min().alias(f"{col}__min"),
-                pl.col(col).max().alias(f"{col}__max"),
-            ])
-        stats = df.select(agg_exprs).row(0, named=True)
-
-        # Build cast expressions for columns that can be optimized
-        cast_exprs = []
-        for col in int_cols:
-            min_val = stats[f"{col}__min"]
-            max_val = stats[f"{col}__max"]
-
-            if min_val is None or max_val is None:
-                continue
-
-            target_dtype = None
-            if min_val >= 0:
-                if max_val <= 255:
-                    target_dtype = pl.UInt8
-                elif max_val <= 65535:
-                    target_dtype = pl.UInt16
-                elif max_val <= 4294967295:
-                    target_dtype = pl.UInt32
-            else:
-                if min_val >= -128 and max_val <= 127:
-                    target_dtype = pl.Int8
-                elif min_val >= -32768 and max_val <= 32767:
-                    target_dtype = pl.Int16
-                elif min_val >= -2147483648 and max_val <= 2147483647:
-                    target_dtype = pl.Int32
-
-            if target_dtype is not None:
-                cast_exprs.append(pl.col(col).cast(target_dtype))
-
-        if cast_exprs:
-            df = df.with_columns(cast_exprs)
-
-        return df
-    
+    # column-deriving ops
+    coalesce_columns = staticmethod(coalesce_columns)
+    generate_hash_column = staticmethod(generate_hash_column)

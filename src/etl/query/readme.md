@@ -1,90 +1,94 @@
+# Query Generation
+
+SQL generation utilities: build `CREATE TABLE` DDL from a DataFrame, and build
+`MERGE` / `UPSERT` / `APPEND` statements between a source and target table.
+
 ## Table of Contents
 
-
-  - [Creator Class](#creator-class)
-    - [Initialization](#initialization)
-    - [Methods](#methods)
-    - [Example](#example)
-  - [MsSqlUpdater Class](#mssqlupdater-class)
-    - [Initialization](#initialization-1)
-    - [Methods](#methods-1)
-    - [Example](#example-1)
+- [Creator Class](#creator-class)
+  - [create_table](#create_table)
+  - [Example](#example)
+- [MsSqlUpdater Class](#mssqlupdater-class)
+  - [Methods](#methods)
+  - [Example](#example-1)
 
 ## Creator Class
 
-The `Creator` class is designed to facilitate the generation of SQL table creation queries for both MSSQL and MariaDB databases from a given Pandas DataFrame.
+The `Creator` class generates `CREATE TABLE` DDL from a Pandas DataFrame. Column types,
+sizes, and nullability are derived from the data via the `Analyzer`, and the SQL is rendered
+for whichever dialect you pass (`mssql`, `mariadb`, or `postgres` from
+`etl.database.sql_dialects`).
 
-## Initialization
+### `create_table`
 
 ```python
-def __init__(self, df: pd.DataFrame, schema: str, table: str, primary_key: str = None,
-             unique_columns: list[str] = None, history: bool = False,
-             varchar_padding: int = 20, float_precision: int = 10, decimal_places: int = 2,
-             generate_id: bool = False) -> None
+Creator.create_table(
+    data_frame,            # pd.DataFrame to model the schema from
+    schema_name,           # target schema, e.g. "dbo" / "analytics"
+    table_name,            # target table name
+    dialect,               # one of etl.database.sql_dialects.{mssql, mariadb, postgres}
+    primary_key_column=None,
+    unique_columns=None,
+    history=False,
+    varchar_padding=20,
+    float_precision=10,
+    decimal_places=2,
+    generate_identity_column=False,
+) -> str                   # returns the CREATE TABLE statement
 ```
 
-## Methods
-
-- **create_mssql_table()**: Generates a SQL query to create a MSSQL table.
-- **create_mariadb_table()**: Generates a SQL query to create a MariaDB table.
-- **new_mssql_table()**: Returns a MSSQL table creation query using instance parameters.
-- **new_mariadb_table()**: Returns a MariaDB table creation query using instance parameters.
-
-## Example
+### Example
 
 ```python
 import pandas as pd
-from your_module.creator import Creator  # Replace with actual module path
+from etl.query.creator import Creator
+from etl.database.sql_dialects import mssql
 
-# Sample DataFrame
 df = pd.DataFrame({
     'name': ['Alice', 'Bob'],
-    'age': [25, 30]
+    'age': [25, 30],
 })
 
-creator = Creator(df, schema="dbo", table="users", primary_key="id", generate_id=True)
-mssql_query = creator.new_mssql_table()
-print(mssql_query)
+ddl = Creator.create_table(
+    df,
+    schema_name="dbo",
+    table_name="users",
+    dialect=mssql,
+    primary_key_column="id",
+    generate_identity_column=True,
+)
+print(ddl)
 ```
 
 ## MsSqlUpdater Class
 
-The `MsSqlUpdater` class provides utilities to generate SQL queries for updating, merging, and appending data between source and target tables within a MSSQL database.
+The `MsSqlUpdater` class builds SQL statements for moving data between a source and a target
+table within MSSQL. The `*_sql` static methods are pure string builders; the instance methods
+(`merge`, `upsert`, `append`) build the same SQL from attributes supplied at construction and
+return the statement for you to execute.
 
-## Initialization
+### Methods
 
-```python
-def __init__(self, source_schema: str, source_table: str, source_columns: list[str], source_id_column: str,
-             target_schema: str, target_table: str, target_columns: list[str], target_id_column: str)
-```
+- **`merge_sql(...)`** / **`merge(delete_unmatched=True)`** — `MERGE` statement, optionally deleting unmatched target rows.
+- **`upsert_sql(...)`** / **`upsert()`** — insert-or-update statement.
+- **`append_sql(...)`** / **`append()`** — `INSERT INTO ... EXCEPT ...` that avoids inserting duplicates.
 
-## Methods
-
-- **merge_sql()**: Creates a SQL `MERGE` statement for combining datasets with optional deletion of unmatched records.
-- **upsert_sql()**: Generates a SQL statement for inserting and updating records.
-- **append_sql()**: Forms a SQL `INSERT INTO` statement with an `EXCEPT` clause to avoid duplicates.
-- **merge()**: Instance method for executing a `MERGE` using initialized attributes.
-- **upsert()**: Instance method for executing an `UPSERT` using initialized attributes.
-- **append()**: Instance method for executing an `APPEND` using initialized attributes.
-
-## Example
+### Example
 
 ```python
-from your_module.mssql_updater import MsSqlUpdater  # Replace with actual module path
+from etl.query.mssql_updater import MsSqlUpdater
 
 updater = MsSqlUpdater(
-    source_schema="stage", source_table="new_users", source_columns=["name", "age"], source_id_column="user_id",
-    target_schema="dbo", target_table="users", target_columns=["name", "age"], target_id_column="user_id"
+    source_schema="stage", source_table="new_users",
+    source_columns=["name", "age"], source_id_column="user_id",
+    target_schema="dbo", target_table="users",
+    target_columns=["name", "age"], target_id_column="user_id",
 )
 
 merge_query = updater.merge()
 print(merge_query)
 ```
 
-## Contributing
-
-Instructions on how others can contribute to your project.
-
 ## License
 
-Specify the license under which your project is distributed.
+MIT — see the [repository LICENSE](../../../LICENSE).
