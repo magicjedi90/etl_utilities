@@ -74,6 +74,31 @@ class TestAnalyzer(unittest.TestCase):
         expected = []
         self.assertListEqual(result, expected)
 
+    def test_generate_column_metadata_all_zero_column(self):
+        # Regression: an all-zero numeric column used to raise a TypeError
+        # (None - int) inside the integer branch that was silently swallowed,
+        # leaving partially-populated metadata.
+        df = pd.DataFrame({'zeros': [0, 0, 0]})
+        [metadata] = Analyzer.generate_column_metadata(df, None, None, 2)
+        # All values are falsy literals, so boolean outranks numeric
+        self.assertEqual('boolean', metadata['data_type'])
+        self.assertEqual(1, metadata['float_precision'])
+
+    def test_generate_column_metadata_negative_magnitude(self):
+        # left-of-decimal digits must consider the most negative value too
+        df = pd.DataFrame({'num': [-5000.5, 3.25]})
+        [metadata] = Analyzer.generate_column_metadata(df, None, None, 2)
+        self.assertEqual('float', metadata['data_type'])
+        self.assertEqual(4 + 2, metadata['float_precision'])
+
+    def test_generate_column_metadata_integer_column(self):
+        df = pd.DataFrame({'num': [7, 42, 1000]})
+        [metadata] = Analyzer.generate_column_metadata(df, None, None, 2)
+        self.assertEqual('integer', metadata['data_type'])
+        self.assertEqual(1000, metadata['biggest_num'])
+        self.assertEqual(7, metadata['smallest_num'])
+        self.assertEqual(4, metadata['float_precision'])
+
     def test_find_categorical_columns_invalid_threshold(self):
         with self.assertRaises(ValueError):
             Analyzer.find_categorical_columns(self.df, -0.5)

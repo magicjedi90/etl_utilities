@@ -119,42 +119,55 @@ class Analyzer:
                 column_metadata['is_empty'] = True
                 column_metadata_list.append(column_metadata)
                 continue
-            try:
-                series.apply(Parser.parse_float)
-                no_null_series = series.dropna()
-                if not no_null_series.eq(0).all():
-                    left_digits = int(math.log10(abs(series.max()))) + 1
-                    float_precision = left_digits + decimal_places
-                    column_metadata['data_type'] = 'float'
-                    column_metadata['float_precision'] = float_precision
-                    column_metadata['decimal_places'] = decimal_places
-                series.apply(Parser.parse_integer)
-                biggest_num = series.max()
-                smallest_num = series.min()
-                column_metadata['data_type'] = 'integer'
-                column_metadata['biggest_num'] = biggest_num
-                column_metadata['smallest_num'] = smallest_num
-                column_metadata['float_precision'] -= decimal_places
-            except (ValueError, TypeError):
-                pass
-            try:
-                series.apply(Parser.parse_boolean)
+            column_metadata.update(Analyzer._probe_numeric(series, decimal_places))
+            # Boolean outranks numeric: a column of all 0/1/true/false is boolean.
+            if Analyzer._parses_as(series, Parser.parse_boolean):
                 column_metadata['data_type'] = 'boolean'
-            except ValueError:
-                pass
+            if column_metadata['data_type'] is None and Analyzer._parses_as(series, Parser.parse_date):
+                column_metadata['data_type'] = 'datetime'
             if column_metadata['data_type'] is None:
-                try:
-                    series.apply(Parser.parse_date)
-                    column_metadata['data_type'] = 'datetime'
-                except (ValueError, TypeError, OverflowError):
-                    pass
-            if column_metadata['data_type'] is None:
-                str_series = series.apply(str)
-                largest_string_size = str_series.str.len().max()
                 column_metadata['data_type'] = 'string'
-                column_metadata['max_str_size'] = largest_string_size
+                column_metadata['max_str_size'] = series.apply(str).str.len().max()
             column_metadata_list.append(column_metadata)
         return column_metadata_list
+
+    @staticmethod
+    def _parses_as(series: pd.Series, parse_function) -> bool:
+        """Return True if every value in the series parses with parse_function."""
+        try:
+            series.apply(parse_function)
+            return True
+        except (ValueError, TypeError, OverflowError):
+            return False
+
+    @staticmethod
+    def _probe_numeric(series: pd.Series, decimal_places: int) -> dict:
+        """
+        Probe a series as float, then refine to integer if every value is whole.
+
+        Returns the metadata fields to merge ({} when the series is not numeric).
+        float_precision is left-of-decimal digits plus decimal_places for floats,
+        and just the left-of-decimal digits for integers.
+        """
+        try:
+            parsed = series.apply(Parser.parse_float).dropna()
+        except (ValueError, TypeError, OverflowError):
+            return {}
+        magnitude = max(abs(parsed.max()), abs(parsed.min())) if not parsed.empty else 0
+        left_digits = int(math.log10(magnitude)) + 1 if magnitude > 0 else 1
+        metadata = {
+            'data_type': 'float',
+            'float_precision': left_digits + decimal_places,
+            'decimal_places': decimal_places,
+        }
+        if Analyzer._parses_as(series, Parser.parse_integer):
+            metadata.update({
+                'data_type': 'integer',
+                'biggest_num': series.max(),
+                'smallest_num': series.min(),
+                'float_precision': left_digits,
+            })
+        return metadata
 
     @staticmethod
     def find_categorical_columns(df: pd.DataFrame, unique_threshold: float = 1) -> list[Hashable]:
