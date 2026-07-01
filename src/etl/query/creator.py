@@ -91,16 +91,18 @@ class Creator:
                 smallest = column_info["smallest_num"]
                 largest = column_info["biggest_num"]
 
-                if smallest < -2147483648 or largest > 2147483648:
-                    data_definition_clause = f"{escaped_column} bigint"
-                if smallest >= -2147483648 and largest <= 2147483648:
-                    data_definition_clause = f"{escaped_column} int"
-                if smallest >= -32768 and largest <= 32768:
+                # Narrowest type first; tinyint bounds differ per dialect
+                # (MSSQL tinyint is unsigned 0..255, MariaDB tinyint is signed -128..127).
+                if dialect.name == "mssql" and 0 <= smallest and largest <= 255:
+                    data_definition_clause = f"{escaped_column} tinyint"
+                elif dialect.name == "mariadb" and -128 <= smallest and largest <= 127:
+                    data_definition_clause = f"{escaped_column} tinyint"
+                elif smallest >= -32768 and largest <= 32767:
                     data_definition_clause = f"{escaped_column} smallint"
-                if dialect.name == "mssql" and 0 <= smallest <= largest <= 255:
-                    data_definition_clause = f"{escaped_column} tinyint"
-                if dialect.name == "mariadb" and -128 <= smallest <= largest <= 127:
-                    data_definition_clause = f"{escaped_column} tinyint"
+                elif smallest >= -2147483648 and largest <= 2147483647:
+                    data_definition_clause = f"{escaped_column} int"
+                else:
+                    data_definition_clause = f"{escaped_column} bigint"
 
             elif data_type == "boolean":
                 data_definition_clause = f"{escaped_column} {dialect.boolean_type}"
@@ -152,7 +154,7 @@ class Creator:
                 "\t\tdefault sysutcdatetime() not null,\n"
                 "\tsystem_record_end datetime2 generated always as row end\n"
                 f"\t\tconstraint df_{table_name}_system_record_end\n"
-                "\t\tdefault sysutcdataetime() not null,\n"
+                "\t\tdefault sysutcdatetime() not null,\n"
                 "\t\tperiod for system_time(system_record_start, system_record_end)"
             )
             create_statement = (

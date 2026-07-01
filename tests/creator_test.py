@@ -32,7 +32,7 @@ class TestTableMaker(unittest.TestCase):
             "\t\tdefault sysutcdatetime() not null,\n"
             "\tsystem_record_end datetime2 generated always as row end\n"
             "\t\tconstraint df_test_table_system_record_end\n"
-            "\t\tdefault sysutcdataetime() not null,\n"
+            "\t\tdefault sysutcdatetime() not null,\n"
             "\t\tperiod for system_time(system_record_start, system_record_end)\n)"
             " with \n(\tsystem_versioning = on (history_table = dbo.[test_table_history])\n);"
         )
@@ -41,6 +41,31 @@ class TestTableMaker(unittest.TestCase):
                                                   primary_key_column='id_column', history=True)
 
         self.assertEqual(expected_query, actual_query)
+
+    @staticmethod
+    def _column_type(values, dialect):
+        """Generate DDL for a single-column df and return the declared type."""
+        df = pd.DataFrame({'num': values})
+        ddl = Creator.create_table(df, 'dbo', 'boundary_table', dialect)
+        # Fragment looks like "[num] smallint" / "`num` int"
+        fragment = [line for line in ddl.splitlines() if 'num' in line][0]
+        return fragment.strip().rstrip(',').split(' ')[1]
+
+    def test_integer_boundaries_mssql(self):
+        self.assertEqual('tinyint', self._column_type([200, 5], mssql))
+        self.assertEqual('smallint', self._column_type([-100, 100], mssql))  # negative excludes mssql tinyint
+        self.assertEqual('smallint', self._column_type([32767, 3], mssql))
+        self.assertEqual('int', self._column_type([32768, 3], mssql))
+        self.assertEqual('int', self._column_type([2147483647, 3], mssql))
+        self.assertEqual('bigint', self._column_type([2147483648, 3], mssql))
+        self.assertEqual('bigint', self._column_type([-2147483649, 3], mssql))
+
+    def test_integer_boundaries_mariadb(self):
+        self.assertEqual('tinyint', self._column_type([-100, 100], mariadb))
+        self.assertEqual('smallint', self._column_type([200, 5], mariadb))  # >127 excludes mariadb tinyint
+        self.assertEqual('smallint', self._column_type([-32768, 3], mariadb))
+        self.assertEqual('int', self._column_type([-32769, 3], mariadb))
+        self.assertEqual('bigint', self._column_type([2147483648, 3], mariadb))
 
 
 if __name__ == '__main__':
