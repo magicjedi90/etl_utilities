@@ -1,13 +1,15 @@
+import logging
+
 from pandas import DataFrame
 from sqlalchemy import PoolProxiedConnection
-from .extra_column_exception import ExtraColumnsException
+from .exceptions import ColumnDataException, ExtraColumnsException
 from .utils import DatabaseUtils
 from ..dataframe.analyzer import Analyzer
 from .. import constants
 import pandas as pd
 import numpy as np
-from ..logger import Logger
-logger = Logger().get_logger()
+
+logger = logging.getLogger(__name__)
 
 class Validator:
     """
@@ -48,7 +50,8 @@ class Validator:
         new_columns = np.setdiff1d(df.columns.tolist(), db_columns)
         if new_columns.size > 0:
             extra_columns_df = df[new_columns]
-            raise ExtraColumnsException(extra_columns_df)
+            column_metadata = Analyzer.generate_column_metadata(extra_columns_df, None, None, 0)
+            raise ExtraColumnsException(extra_columns_df, column_metadata)
 
     @staticmethod
     def _validate_column_types(df_metadata, column_info_df):
@@ -119,14 +122,3 @@ class Validator:
 
     def validate(self):
         return self.validate_upload(self._connection, self._df, self._schema, self._table)
-
-
-
-class ColumnDataException(Exception):
-    """
-    Defines the ColumnDataException class, which is an exception subclass used for raising errors related to column data.
-
-    Classes:
-        ColumnDataException(Exception): An exception subclass for column data errors.
-    """
-    pass

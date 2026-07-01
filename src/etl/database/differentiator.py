@@ -1,12 +1,12 @@
+import logging
 import itertools
 import pandas as pd
-from ..logger import Logger
 from sqlalchemy import PoolProxiedConnection
 from warnings import filterwarnings
 from .utils import DatabaseUtils
 
 filterwarnings("ignore", category=UserWarning, message='.*pandas only supports SQLAlchemy connectable.*')
-logger = Logger().get_logger()
+logger = logging.getLogger(__name__)
 
 
 class Differentiator:

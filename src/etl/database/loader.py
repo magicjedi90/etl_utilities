@@ -2,15 +2,15 @@
 etl.database.unified_loader.Loader, which uses parameterized batched inserts
 and supports every dialect."""
 
+import logging
 import warnings
 
 from sqlalchemy.engine.interfaces import DBAPICursor
 import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
-from ..logger import Logger
 
-logger = Logger().get_logger()
+logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
     "etl.database.loader.Loader is deprecated; use etl.database.unified_loader.Loader instead."

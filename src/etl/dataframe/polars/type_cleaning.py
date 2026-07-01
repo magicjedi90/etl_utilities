@@ -10,6 +10,7 @@ and applies them with cleaning_plan.apply_cleaning_plan — it is the one-shot
 wrapper over the same logic the batch/streaming API uses, so the two paths
 cannot drift.
 """
+import logging
 import time
 from typing import Callable, Dict, List, Optional
 
@@ -18,9 +19,8 @@ import polars as pl
 from .cleaning_plan import _infer_plan_with_counts, apply_cleaning_plan
 from .parser import PolarsParser
 from .schema_tools import optimize_dtypes
-from ...logger import Logger
 
-logger = Logger().get_logger()
+logger = logging.getLogger(__name__)
 
 
 def _clean_columns(

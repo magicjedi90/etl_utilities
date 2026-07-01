@@ -22,7 +22,18 @@ It exists to remove the boilerplate from the boring-but-critical middle of a dat
 pip install etl_utilities
 ```
 
-The core install pulls in `pandas`, `polars`, `pyarrow`, `numpy`, `SQLAlchemy`, `psycopg2-binary`, and `pyspark`.
+The core install pulls in `pandas`, `numpy`, `SQLAlchemy`, `python-dateutil`, and `rich`.
+Backend-specific dependencies are optional extras:
+
+```bash
+pip install etl_utilities[polars]     # Polars cleaning
+pip install etl_utilities[spark]      # Spark cleaning
+pip install etl_utilities[postgres]   # Postgres loading (psycopg2)
+pip install etl_utilities[arrow]      # Parquet schema reconciliation (pyarrow)
+pip install etl_utilities[all]        # everything
+```
+
+Requires Python 3.10+.
 
 ## Quick Start — an end-to-end pipeline
 
@@ -150,8 +161,9 @@ Each subpackage has its own focused README:
 
 ## Logging
 
-The project uses a singleton `Logger` (`etl.logger.Logger`) with colored Rich output and dual
-stdout/stderr streams, so cleaning/loading steps emit readable, level-appropriate progress.
+Library modules log through standard `logging.getLogger(__name__)` loggers and emit no output
+unless your application configures logging. The optional `etl.logger.Logger` singleton is a
+convenience for applications: it attaches ANSI-colored dual stdout/stderr handlers.
 
 ## License
 

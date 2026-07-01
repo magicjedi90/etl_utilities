@@ -67,7 +67,7 @@ All backends follow the same narrowing order: **Boolean → Integer → Float �
 
 - **Spark uses DoubleType** (64-bit) over FloatType for financial precision
 - **All timestamps normalize to UTC** for consistent serialization
-- **Singleton logger** (`src/etl/logger.py`) with colored Rich output, dual stdout/stderr streams
+- **Logging**: library modules use `logging.getLogger(__name__)` and configure no handlers; `src/etl/logger.py` provides an opt-in `Logger` singleton for applications (ANSI-colored, dual stdout/stderr streams)
 - **`constants.py`** maps database types and numpy types used throughout validation and type conversion
 
 ## Testing

@@ -23,17 +23,37 @@ dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pandas" },
-    { name = "polars" },
-    { name = "psycopg2-binary" },
-    { name = "pyarrow" },
-    { name = "pyspark" },
     { name = "python-dateutil" },
     { name = "rich" },
     { name = "sqlalchemy" },
 ]
 
+[package.optional-dependencies]
+all = [
+    { name = "polars" },
+    { name = "psycopg2-binary" },
+    { name = "pyarrow" },
+    { name = "pyspark" },
+]
+arrow = [
+    { name = "pyarrow" },
+]
+polars = [
+    { name = "polars" },
+]
+postgres = [
+    { name = "psycopg2-binary" },
+]
+spark = [
+    { name = "pyspark" },
+]
+
 [package.dev-dependencies]
 dev = [
+    { name = "polars" },
+    { name = "psycopg2-binary" },
+    { name = "pyarrow" },
+    { name = "pyspark" },
     { name = "pytest" },
 ]
 
@@ -41,17 +61,28 @@ dev = [
 requires-dist = [
     { name = "numpy" },
     { name = "pandas" },
-    { name = "polars" },
-    { name = "psycopg2-binary" },
-    { name = "pyarrow" },
-    { name = "pyspark" },
+    { name = "polars", marker = "extra == 'all'" },
+    { name = "polars", marker = "extra == 'polars'" },
+    { name = "psycopg2-binary", marker = "extra == 'all'" },
+    { name = "psycopg2-binary", marker = "extra == 'postgres'" },
+    { name = "pyarrow", marker = "extra == 'all'" },
+    { name = "pyarrow", marker = "extra == 'arrow'" },
+    { name = "pyspark", marker = "extra == 'all'" },
+    { name = "pyspark", marker = "extra == 'spark'" },
     { name = "python-dateutil" },
     { name = "rich" },
     { name = "sqlalchemy" },
 ]
+provides-extras = ["all", "arrow", "polars", "postgres", "spark"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.3.5" }]
+dev = [
+    { name = "polars" },
+    { name = "psycopg2-binary" },
+    { name = "pyarrow" },
+    { name = "pyspark" },
+    { name = "pytest", specifier = ">=8.3.5" },
+]
 
 [[package]]
 name = "exceptiongroup"

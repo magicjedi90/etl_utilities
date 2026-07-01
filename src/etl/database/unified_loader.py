@@ -7,7 +7,12 @@ import numpy as np
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
 from sqlalchemy.engine.interfaces import DBAPICursor
-from psycopg2.extras import execute_values
+
+try:
+    from psycopg2.extras import execute_values
+except ImportError:  # psycopg2 is optional — only postgres loads need it
+    execute_values = None  # type: ignore[assignment]
+
 from .sql_dialects import SqlDialect
 from .. import constants
 
@@ -101,6 +106,10 @@ class Loader:
         """
         is_postgres = self._dialect.name == "postgres"
         if is_postgres:
+            if execute_values is None:
+                raise ImportError(
+                    "psycopg2 is required for postgres loads — install etl_utilities[postgres]"
+                )
             # psycopg2's execute_values expands a single VALUES %s template itself
             query = query.split("VALUES")[0] + "VALUES %s"
 

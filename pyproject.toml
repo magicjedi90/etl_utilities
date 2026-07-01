@@ -26,18 +26,25 @@ classifiers = [
 dependencies = [
     "numpy",
     "pandas",
-    "polars",
-    "pyarrow",
     "python_dateutil",
     "SQLAlchemy",
     "rich",
-    "psycopg2-binary",
-    "pyspark",
 ]
+
+[project.optional-dependencies]
+polars = ["polars"]
+spark = ["pyspark"]
+postgres = ["psycopg2-binary"]
+arrow = ["pyarrow"]
+all = ["polars", "pyspark", "psycopg2-binary", "pyarrow"]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
+    "polars",
+    "pyspark",
+    "psycopg2-binary",
+    "pyarrow",
 ]
 
 [project.urls]
@@ -51,11 +58,13 @@ path = "src/etl/__about__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/etl"]
 [tool.hatch.envs.types]
+features = ["all"]
 extra-dependencies = [
     "mypy>=1.0.0",
+    "pytest>=8.3.5",
 ]
 [tool.hatch.envs.types.scripts]
-check = "mypy --install-types --non-interactive {args:src/etl tests}"
+check = "mypy --install-types --non-interactive --explicit-package-bases {args:src/etl tests}"
 
 [tool.coverage.run]
 source_pkgs = ["etl", "tests"]

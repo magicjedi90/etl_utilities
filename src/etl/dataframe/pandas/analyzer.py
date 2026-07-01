@@ -47,20 +47,16 @@ class Analyzer:
         total_records = df.shape[0]
         column_list = df.columns
         unique_columns = Analyzer.find_unique_columns(df)
-        unique_column_pairs = []
+        unique_column_pairs: list[tuple[Hashable, Hashable]] = []
         combo_df = pd.DataFrame()
-        for column_set in itertools.combinations(column_list, 2):
-            if column_set is None:
-                continue
-            first_column = column_set[0]
-            second_column = column_set[1]
+        for first_column, second_column in itertools.combinations(column_list, 2):
             if first_column in unique_columns or second_column in unique_columns:
                 continue
             combo_df["combo"] = df[first_column].astype(str) + df[second_column].astype(str)
             combined_unique = combo_df["combo"].unique()
             combined_unique_count = combined_unique.size
             if combined_unique_count == total_records:
-                unique_column_pairs.append(column_set)
+                unique_column_pairs.append((first_column, second_column))
         return unique_column_pairs
 
     @staticmethod

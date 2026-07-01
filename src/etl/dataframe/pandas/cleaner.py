@@ -33,26 +33,20 @@ class Cleaner:
     @staticmethod
     def clean_series(series: pd.Series, clean_function) -> pd.Series:
         """
-        Apply a cleaning function to a series.
+        Apply a cleaning function to every element of a series.
 
         Args:
             series: The pandas Series to clean.
             clean_function: The function to apply to each element.
 
         Returns:
-            The cleaned Series with appropriate dtype.
+            The cleaned Series.
 
         Raises:
-            ValueError, TypeError, ParserError, OverflowError: If cleaning fails.
+            Whatever clean_function raises on unparseable values
+            (ValueError, TypeError, ParserError, OverflowError, ...).
         """
-        try:
-            cleaned_series = series.apply(clean_function)
-            series_dtype = clean_function.__annotations__.get('return', None)
-            if series_dtype:
-                cleaned_series = cleaned_series.astype(series_dtype)
-            return cleaned_series
-        except (ValueError, TypeError, dateutil_parser.ParserError, OverflowError):
-            raise
+        return series.apply(clean_function)
 
     @staticmethod
     def clean_numbers(df: pd.DataFrame) -> pd.DataFrame:

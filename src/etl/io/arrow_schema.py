@@ -18,14 +18,14 @@ unified schema (any decimal -> float64; any cross-file type conflict -> large_st
 then ``ds.dataset(paths, schema=unified)`` — PyArrow *actually casts* on read. Iterate
 fragments -> to_batches() for memory-safe streaming.
 """
+import logging
 from concurrent.futures import ThreadPoolExecutor
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from ..logger import Logger
 
-logger = Logger().get_logger()
+logger = logging.getLogger(__name__)
 
 
 def unify_parquet_schemas(paths, filesystem=None, max_workers: int = 4) -> pa.Schema:

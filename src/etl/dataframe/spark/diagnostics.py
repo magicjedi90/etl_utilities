@@ -34,9 +34,10 @@ def _non_null_non_empty(column_name: str) -> Column:
 
 def _count_where(df: DataFrame, condition: Column) -> int:
     """Count rows matching a condition in a single aggregation."""
-    return df.select(
+    row = df.select(
         spark_functions.sum(spark_functions.when(condition, 1).otherwise(0))
-    ).first()[0] or 0
+    ).first()
+    return (row[0] if row is not None else 0) or 0
 
 
 def count_conversion_failures(

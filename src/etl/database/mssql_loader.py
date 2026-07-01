@@ -2,6 +2,7 @@
 with the mssql dialect, which handles placeholders, casting, and batching
 for every supported backend."""
 
+import logging
 import warnings
 
 from sqlalchemy.engine.interfaces import DBAPICursor
@@ -11,8 +12,7 @@ from .sql_dialects import mssql
 from .unified_loader import prepare_dataframe
 import pandas as pd
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, MofNCompleteColumn
-from ..logger import Logger
-logger = Logger().get_logger()
+logger = logging.getLogger(__name__)
 
 _DEPRECATION_MESSAGE = (
     "MsSqlLoader is deprecated; use etl.database.unified_loader.Loader with the mssql dialect."

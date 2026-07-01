@@ -1,4 +1,4 @@
-from rich.logging import logging
+import logging
 import sys
 
 
@@ -58,7 +58,8 @@ class Logger:
         """Return the configured logger."""
         return self.logger
 
-    def set_level(self, level: logging.INFO | logging.DEBUG | logging.WARNING | logging.ERROR | logging.CRITICAL):
+    def set_level(self, level: int) -> None:
+        """Set the log level (e.g. logging.INFO, logging.DEBUG)."""
         self.logger.setLevel(level)
 
 

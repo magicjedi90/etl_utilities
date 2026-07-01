@@ -1,37 +1,17 @@
 from __future__ import annotations
-from typing import Sequence
+
+import logging
+
 import pandas as pd
 from ..database.sql_dialects import SqlDialect
 from ..dataframe.analyzer import Analyzer
-from ..logger import Logger
 
-logger = Logger().get_logger()
+logger = logging.getLogger(__name__)
 
 
 class Creator:
-    def __init__(
-            self,
-            data_frame: pd.DataFrame,
-            schema_name: str,
-            table_name: str,
-            primary_key_column: str | None = None,
-            unique_columns: list[str] | None = None,
-            history: bool = False,
-            varchar_padding: int = 20,
-            float_precision: int = 10,
-            decimal_places: int = 2,
-            generate_identity_column: bool = False,
-    ) -> None:
-        self._data_frame = data_frame
-        self._schema_name = schema_name
-        self._table_name = table_name
-        self._primary_key_column = primary_key_column
-        self._unique_columns = unique_columns
-        self._history = history
-        self._varchar_padding = varchar_padding
-        self._float_precision = float_precision
-        self._decimal_places = decimal_places
-        self._generate_identity_column = generate_identity_column
+    """Generates CREATE TABLE DDL from DataFrame analysis. Use the static
+    create_table method — the class carries no instance state."""
 
     @staticmethod
     def create_table(

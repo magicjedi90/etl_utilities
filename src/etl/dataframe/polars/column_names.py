@@ -1,13 +1,13 @@
 # src/etl/dataframe/polars/column_names.py
 """Column-name normalization for Polars DataFrames (snake_case / PascalCase)."""
+import logging
 from typing import Dict, List
 
 import polars as pl
 
 from ..common.utils import standardize_column_name, to_pascal_case
-from ...logger import Logger
 
-logger = Logger().get_logger()
+logger = logging.getLogger(__name__)
 
 
 def column_names_to_snake_case(df: pl.DataFrame, on_collision: str = "coalesce") -> pl.DataFrame:
