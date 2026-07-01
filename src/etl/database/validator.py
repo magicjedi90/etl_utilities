@@ -1,6 +1,7 @@
 from pandas import DataFrame
 from sqlalchemy import PoolProxiedConnection
 from .extra_column_exception import ExtraColumnsException
+from .utils import DatabaseUtils
 from ..dataframe.analyzer import Analyzer
 from .. import constants
 import pandas as pd
@@ -37,11 +38,7 @@ class Validator:
     @staticmethod
     def _fetch_column_info(connection: PoolProxiedConnection, df: pd.DataFrame, schema: str, table: str) -> tuple[
         list[dict], DataFrame]:
-        get_column_info_query = (
-            f'select COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION '
-            f'from INFORMATION_SCHEMA.columns '
-            f'where table_schema = \'{schema}\' and table_name = \'{table}\'')
-        column_info_df = pd.read_sql(get_column_info_query, connection)
+        column_info_df = DatabaseUtils(connection).get_column_info(schema, table)
         df_metadata = Analyzer.generate_column_metadata(df, None, None, 2)
         return df_metadata, column_info_df
 

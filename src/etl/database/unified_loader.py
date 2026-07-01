@@ -13,6 +13,37 @@ from .. import constants
 
 MAX_PARAM_PER_STATEMENT = 100000  # safe default for most engines
 
+# Text columns longer than this get an explicit cast placeholder so drivers
+# don't guess an undersized parameter type.
+LONG_TEXT_THRESHOLD = 255
+
+
+def prepare_dataframe(df: pd.DataFrame, dialect: SqlDialect) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Return a DBAPI-ready copy of the DataFrame plus per-column placeholders.
+
+    Long text columns get an explicit cast placeholder, numpy scalar columns
+    are converted to their plain-python equivalents so DBAPIs do not choke,
+    and NaNs become None. The caller's DataFrame is never mutated.
+    """
+    df = df.copy()
+    placeholders = []
+    for column in df.columns:
+        series = df[column]
+        max_size = series.apply(str).str.len().max()
+        if max_size > LONG_TEXT_THRESHOLD:
+            if dialect.name == "mssql":
+                placeholders.append(f'cast ( {dialect.placeholder} as nvarchar(max))')
+            else:
+                placeholders.append(f'cast ( {dialect.placeholder} as varchar(21844))')
+        else:
+            placeholders.append(dialect.placeholder)
+        # switches from numpy class to python class for bool float and int
+        series_type = series.dtype
+        if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
+            df[column] = series.tolist()
+    return df.replace({np.nan: None}), placeholders
+
 
 class Loader:
     """
@@ -45,27 +76,8 @@ class Loader:
             self._cursor.fast_executemany = True
 
     def _prepare_data(self) -> list[str]:
-        """
-        Replace NaNs with None and down-cast numpy scalar types to
-        their plain-python equivalents so DBAPIs do not choke.
-        """
-        placeholders = []
-        for column in self._df.columns:
-            series = self._df[column]
-            series_type = series.dtype
-            str_column = series.apply(str)
-            max_size = str_column.str.len().max()
-            if max_size > 256:
-                if self._dialect.name == "mssql":
-                    placeholders.append('cast ( ? as nvarchar(max))')
-                else:
-                    placeholders.append('cast ( %s as varchar(21844))')
-            else:
-                placeholders.append(self._placeholder)
-            # switches from numpy class to python class for bool float and int
-            if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
-                self._df[column] = series.tolist()
-        self._df = self._df.replace({np.nan: None})
+        """Prepare a DBAPI-ready copy of the DataFrame; returns the placeholders."""
+        self._df, placeholders = prepare_dataframe(self._df, self._dialect)
         return placeholders
 
     # ―――― INSERT (VALUES, VALUES, …) ―――― #
@@ -83,10 +95,15 @@ class Loader:
         )
 
     # ―――― generic executor with progress bar ―――― #
-    def _run_progress(self, rows: List[tuple], batch_size: int, query: str, ) -> None:
+    def _run_progress(self, rows: List[tuple], batch_size: int, query: str) -> None:
         """
         Execute the query in chunks with a progress bar.
         """
+        is_postgres = self._dialect.name == "postgres"
+        if is_postgres:
+            # psycopg2's execute_values expands a single VALUES %s template itself
+            query = query.split("VALUES")[0] + "VALUES %s"
+
         total_rows = len(rows)
         with Progress(
                 TextColumn("[progress.description]{task.description}"),
@@ -102,15 +119,8 @@ class Loader:
                 if not chunk:  # Skip if the chunk is empty
                     continue
 
-                actual_chunk_size = len(chunk)
-
-                try:
-                    # build_query is a function, expected to return a single SQL string for the chunk
-                    if self._dialect.name == "postgres":
-                        query = query.split("VALUES")[0] + "VALUES %s"
-                        execute_values(self._cursor, query, chunk)
-                    else:
-                        self._cursor.executemany(query, chunk)
-                except Exception:  # pragma: no cover
-                    raise
-                progress.update(task_id, advance=actual_chunk_size)
+                if is_postgres:
+                    execute_values(self._cursor, query, chunk)
+                else:
+                    self._cursor.executemany(query, chunk)
+                progress.update(task_id, advance=len(chunk))

@@ -1,3 +1,9 @@
+"""Legacy union-select loader. Deprecated: prefer
+etl.database.unified_loader.Loader, which uses parameterized batched inserts
+and supports every dialect."""
+
+import warnings
+
 from sqlalchemy.engine.interfaces import DBAPICursor
 import numpy as np
 import pandas as pd
@@ -5,6 +11,10 @@ from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, M
 from ..logger import Logger
 
 logger = Logger().get_logger()
+
+_DEPRECATION_MESSAGE = (
+    "etl.database.loader.Loader is deprecated; use etl.database.unified_loader.Loader instead."
+)
 
 
 def insert_to_db(column_string: str, cursor: DBAPICursor, data_list: list, location: str,
@@ -23,6 +33,7 @@ def insert_to_db(column_string: str, cursor: DBAPICursor, data_list: list, locat
 
 class Loader:
     def __init__(self, cursor: DBAPICursor, df: pd.DataFrame, schema: str, table: str):
+        warnings.warn(_DEPRECATION_MESSAGE, DeprecationWarning, stacklevel=2)
         self._cursor = cursor
         self._df = df
         self._schema = schema

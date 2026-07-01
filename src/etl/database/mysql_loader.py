@@ -1,34 +1,32 @@
+"""MySQL/MariaDB-specific loader. Deprecated: prefer
+etl.database.unified_loader.Loader with the mariadb dialect, which handles
+placeholders, casting, and batching for every supported backend."""
+
+import warnings
+
 from sqlalchemy.engine.interfaces import DBAPICursor
+
 from .loader import Loader
-from .. import constants
+from .sql_dialects import mariadb
+from .unified_loader import prepare_dataframe
 import pandas as pd
-from ..logger import Logger
-logger = Logger().get_logger()
+
+_DEPRECATION_MESSAGE = (
+    "MySqlLoader is deprecated; use etl.database.unified_loader.Loader with the mariadb dialect."
+)
 
 
 class MySqlLoader(Loader):
     def __init__(self, cursor: DBAPICursor, df: pd.DataFrame, schema: str, table: str) -> None:
+        warnings.warn(_DEPRECATION_MESSAGE, DeprecationWarning, stacklevel=2)
         super().__init__(cursor, df, schema, table)
 
     @staticmethod
     def insert_to_table(cursor: DBAPICursor, df: pd.DataFrame, schema: str, table: str) -> None:
-        column_list = df.columns.tolist()
-        column_list = [f'`{column}`' for column in column_list]
-        column_string = ", ".join(column_list)
-        location = f'{schema}.`{table}`'
-        placeholders = []
-        for column in df.columns:
-            series = df[column]
-            series_type = series.dtype
-            str_column = series.apply(str)
-            max_size = str_column.str.len().max()
-            if max_size > 255:
-                placeholders.append('cast ( %s as varchar(21844))')
-            else:
-                placeholders.append('%s')
-            # switches from numpy class to python class for bool float and int
-            if series_type in constants.NUMPY_BOOL_TYPES or series_type in constants.NUMPY_INT_TYPES or series_type in constants.NUMPY_FLOAT_TYPES:
-                df[column] = series.tolist()
+        warnings.warn(_DEPRECATION_MESSAGE, DeprecationWarning, stacklevel=2)
+        column_string = ", ".join(mariadb.escape(column) for column in df.columns)
+        location = f"{schema}.{mariadb.escape(table)}"
+        df, placeholders = prepare_dataframe(df, mariadb)
         Loader._insert_to_table(column_string, cursor, df, location, placeholders)
 
     def to_table(self) -> None:

@@ -63,7 +63,7 @@ class Creator:
 
         for column_info in column_metadata:
             column_name = column_info["column_name"]
-            escaped_column = f"{dialect.opening_escape}{column_name}{dialect.closing_escape}"
+            escaped_column = dialect.escape(column_name)
 
             # -------------- empty column ----------------------------------------
             if column_info["is_empty"]:
