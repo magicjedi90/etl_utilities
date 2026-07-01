@@ -4,7 +4,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from pyspark.sql import DataFrame
+from pyspark.sql import Column, DataFrame
 from pyspark.sql import functions as spark_functions
 from pyspark.sql.types import StringType
 
@@ -22,6 +22,37 @@ class ColumnDiagnostics:
     failed_conversions: int
     success_rate: float
     sample_failed_values: list[Any]
+
+
+def _non_null_non_empty(column_name: str) -> Column:
+    """Condition: value is non-null and not an empty/whitespace-only string."""
+    column = spark_functions.col(column_name)
+    return column.isNotNull() & (
+        spark_functions.trim(column.cast(StringType())) != ""
+    )
+
+
+def _count_where(df: DataFrame, condition: Column) -> int:
+    """Count rows matching a condition in a single aggregation."""
+    return df.select(
+        spark_functions.sum(spark_functions.when(condition, 1).otherwise(0))
+    ).first()[0] or 0
+
+
+def count_conversion_failures(
+    original_df: DataFrame,
+    converted_df: DataFrame,
+    column_name: str,
+) -> int:
+    """Count values that became null after conversion (excluding empty strings).
+
+    Returns the number of values that were non-null/non-empty before but null after.
+    """
+    original_non_null = _count_where(original_df, _non_null_non_empty(column_name))
+    converted_non_null = _count_where(
+        converted_df, spark_functions.col(column_name).isNotNull()
+    )
+    return original_non_null - converted_non_null
 
 
 def get_conversion_diagnostics(
@@ -57,18 +88,14 @@ def get_conversion_diagnostics(
 
         original_col = spark_functions.col(column_name)
 
-        # Count total and null values in original
+        # Count total, null, and non-null/non-empty values in a single pass
         original_stats = original_df.select(
             spark_functions.count("*").alias("total"),
             spark_functions.sum(
                 spark_functions.when(original_col.isNull(), 1).otherwise(0)
             ).alias("nulls"),
             spark_functions.sum(
-                spark_functions.when(
-                    original_col.isNotNull()
-                    & (spark_functions.trim(original_col.cast(StringType())) != ""),
-                    1,
-                ).otherwise(0)
+                spark_functions.when(_non_null_non_empty(column_name), 1).otherwise(0)
             ).alias("non_null_non_empty"),
         ).first()
 
@@ -76,30 +103,23 @@ def get_conversion_diagnostics(
         original_null_count = original_stats["nulls"] or 0
         non_null_non_empty = original_stats["non_null_non_empty"] or 0
 
-        # Count non-null values in cleaned DataFrame
-        cleaned_non_null = cleaned_df.select(
-            spark_functions.sum(
-                spark_functions.when(
-                    spark_functions.col(column_name).isNotNull(), 1
-                ).otherwise(0)
-            )
-        ).first()[0] or 0
+        cleaned_non_null = _count_where(
+            cleaned_df, spark_functions.col(column_name).isNotNull()
+        )
 
         # Failed conversions: values that were non-null/non-empty but became null
         failed_conversions = non_null_non_empty - cleaned_non_null
         successful_conversions = non_null_non_empty - failed_conversions
 
-        # Calculate success rate
         success_rate = (
             (successful_conversions / non_null_non_empty * 100)
             if non_null_non_empty > 0
             else 100.0
         )
 
-        # Get sample of failed values
         failed_samples: list[Any] = []
         if failed_conversions > 0 and sample_failed_values > 0:
-            failed_samples = _get_failed_value_samples(
+            failed_samples = get_failed_value_samples(
                 original_df, cleaned_df, column_name, sample_failed_values
             )
 
@@ -118,11 +138,11 @@ def get_conversion_diagnostics(
     return diagnostics
 
 
-def _get_failed_value_samples(
+def get_failed_value_samples(
     original_df: DataFrame,
     cleaned_df: DataFrame,
     column_name: str,
-    limit: int,
+    limit: int = 3,
 ) -> list[Any]:
     """Extract sample values that failed conversion (became null).
 
@@ -135,8 +155,6 @@ def _get_failed_value_samples(
     Returns:
         List of original string values that became null after conversion.
     """
-    original_col = spark_functions.col(column_name)
-
     # Add row index to join original and cleaned DataFrames
     original_indexed = original_df.select(column_name).withColumn(
         "_row_idx", spark_functions.monotonically_increasing_id()
@@ -151,16 +169,12 @@ def _get_failed_value_samples(
     )
 
     # Find rows where original was non-null/non-empty but cleaned is null
+    original_value = spark_functions.col(f"orig.{column_name}")
     failed_rows = joined.filter(
-        spark_functions.col(f"orig.{column_name}").isNotNull()
-        & (
-            spark_functions.trim(
-                spark_functions.col(f"orig.{column_name}").cast(StringType())
-            )
-            != ""
-        )
+        original_value.isNotNull()
+        & (spark_functions.trim(original_value.cast(StringType())) != "")
         & spark_functions.col(f"clean.{column_name}").isNull()
-    ).select(spark_functions.col(f"orig.{column_name}").alias("failed_value"))
+    ).select(original_value.alias("failed_value"))
 
     # Collect distinct failed values up to limit
     samples = (
@@ -171,25 +185,3 @@ def _get_failed_value_samples(
     )
 
     return [row["failed_value"] for row in samples]
-
-
-def get_failed_value_samples(
-    original_df: DataFrame,
-    converted_df: DataFrame,
-    column_name: str,
-    limit: int = 3,
-) -> list[Any]:
-    """Get sample values that failed conversion for a single column.
-
-    Public wrapper around _get_failed_value_samples for use in logging.
-
-    Args:
-        original_df: Original DataFrame with string values.
-        converted_df: DataFrame after type conversion attempt.
-        column_name: Name of the column to analyze.
-        limit: Maximum number of samples to return.
-
-    Returns:
-        List of original string values that became null after conversion.
-    """
-    return _get_failed_value_samples(original_df, converted_df, column_name, limit)

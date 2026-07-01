@@ -1,11 +1,12 @@
 import logging
 import math
+import re
 from typing import Optional, Any
 
 import polars as pl
 from dateutil import parser
 
-from ..common.constants import TRUTHY_VALUES, FALSY_VALUES
+from ..common.constants import TRUTHY_VALUES, FALSY_VALUES, NUMERIC_CLEANUP_CHARS, POLARS_DATE_FORMATS
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -21,12 +22,9 @@ class PolarsParser:
     TRUTHY_VALUES = list(TRUTHY_VALUES)
     FALSY_VALUES = list(FALSY_VALUES)
 
-    # Cleaning patterns for numeric values
-    NUMERIC_CLEANUP_PATTERNS = [
-        (',', ''),
-        ('\\$', ''),
-        ('%', '')
-    ]
+    # Cleaning patterns for numeric values (regex, replacement) — derived from
+    # the shared cleanup characters. Kept as an attribute for backwards compat.
+    NUMERIC_CLEANUP_PATTERNS = [(re.escape(char), '') for char in NUMERIC_CLEANUP_CHARS]
 
     @staticmethod
     def parse_boolean_expr(column: str) -> pl.Expr:
@@ -65,35 +63,45 @@ class PolarsParser:
             # Return None for non-boolean-like values instead of raising to keep pipelines resilient
             return None
 
-
     @staticmethod
     def parse_float_expr(column: str) -> pl.Expr:
         """
         Create a Polars expression for parsing float values.
-        Returns an expression that cleans and converts strings to float.
-        Handles empty strings and whitespace by converting them to null before numeric conversion.
-        Also handles cases where numeric cleanup results in an empty string.
+        Normalizes to string, trims whitespace, strips numeric cleanup characters
+        ($, %, ,), and converts to Float64. Empty strings (before or after
+        cleanup) become null, and inf/nan are rejected — they parse as valid
+        Float64 but are not meaningful numeric data.
         """
-        # Normalize input to string and trim whitespace
-        expr = pl.col(column).cast(pl.Utf8, strict=False)
-        expr = expr.str.strip_chars()
-        
+        expr = pl.col(column).cast(pl.Utf8, strict=False).str.strip_chars()
+
         # Handle empty strings and whitespace by converting to null
-        is_null_or_empty = (expr.is_null() | (expr == ""))
-        
+        is_null_or_empty = expr.is_null() | (expr == "")
+
         # Apply numeric cleanup patterns
         for pattern, replacement in PolarsParser.NUMERIC_CLEANUP_PATTERNS:
             expr = expr.str.replace_all(pattern, replacement)
-            
-        # After cleanup, check again for empty strings (e.g., "N/A" -> "" after cleanup)
+
+        # After cleanup, check again for empty strings (e.g., "$" -> "" after cleanup)
         is_null_or_empty = is_null_or_empty | (expr == "")
 
-        # Convert to float, handling nulls and empty strings properly.
-        # Also reject inf/nan — they parse as valid Float64 but are not
-        # meaningful numeric data.
         raw_float = expr.cast(pl.Float64, strict=False)
         return pl.when(is_null_or_empty | raw_float.is_nan() | raw_float.is_infinite()).then(None).otherwise(raw_float)
 
+    @staticmethod
+    def parse_integer_expr(column: str) -> pl.Expr:
+        """
+        Create a Polars expression for parsing integer values.
+        Builds on parse_float_expr, then casts whole numbers to Int64 while
+        leaving fractional values as floats. Note the expression's static dtype
+        is Float64 (the when/then/otherwise supertype); use apply_cleaning_plan's
+        "int64" kind for a strict integer column.
+        """
+        cleaned_float = PolarsParser.parse_float_expr(column)
+        return (pl.when(cleaned_float.is_null())
+                .then(None)
+                .when(cleaned_float == cleaned_float.round(0))
+                .then(cleaned_float.cast(pl.Int64, strict=False))
+                .otherwise(cleaned_float))
 
     @staticmethod
     def parse_date_expr(column: str) -> pl.Expr:
@@ -124,18 +132,14 @@ class PolarsParser:
     @staticmethod
     def parse_date_expr_vectorized(column: str) -> pl.Expr:
         """
-        Fast, vectorized date parsing using a handful of common formats.
-        Helpful for counting and for the first pass in hybrid parsing.
+        Fast, vectorized date parsing using the shared date formats
+        (first matching format wins per value).
         """
         expr_utf8 = pl.col(column).cast(pl.Utf8, strict=False)
-        formats = [
-            "%Y-%m-%d",
-            "%Y/%m/%d",
-            "%b %d, %Y",
-            "%B %d, %Y",
-            "%m/%d/%Y",
+        parsed_candidates = [
+            expr_utf8.str.strptime(pl.Datetime, fmt, strict=False)
+            for fmt in POLARS_DATE_FORMATS
         ]
-        parsed_candidates = [expr_utf8.str.strptime(pl.Datetime, fmt, strict=False) for fmt in formats]
         return pl.coalesce(parsed_candidates)
 
     @staticmethod
@@ -153,42 +157,3 @@ class PolarsParser:
             return parser.parse(str(value).strip())
         except Exception:
             return None
-
-
-    @staticmethod
-    def parse_integer_expr(column: str) -> pl.Expr:
-        """
-        Create a Polars expression for parsing integer values.
-        First cleans the value as a float, then converts to integer if it's a whole number.
-        Handles empty strings and whitespace by converting them to null before numeric conversion.
-        Also handles cases where numeric cleanup results in an empty string.
-        """
-        # First, get the cleaned float value using parse_float_expr logic
-        original = pl.col(column)
-        # Cast to Utf8 safely to allow string operations even if the column is numeric
-        cleaned_utf8 = original.cast(pl.Utf8, strict=False)
-        # Trim whitespace and treat empty strings as null so downstream numeric casts won't error
-        cleaned_utf8 = cleaned_utf8.str.strip_chars()
-        
-        # Handle empty strings and whitespace by converting to null
-        is_null_or_empty = (cleaned_utf8.is_null() | (cleaned_utf8 == ""))
-        
-        # Apply numeric cleanup patterns
-        for pattern, replacement in PolarsParser.NUMERIC_CLEANUP_PATTERNS:
-            cleaned_utf8 = cleaned_utf8.str.replace_all(pattern, replacement)
-            
-        # After cleanup, check again for empty strings (e.g., "N/A" -> "" after cleanup)
-        is_null_or_empty = is_null_or_empty | (cleaned_utf8 == "")
-            
-        # Convert to float, handling nulls and empty strings properly.
-        # Also reject inf/nan — they parse as valid Float64 but are not
-        # meaningful numeric data and cannot be safely cast to Int64.
-        raw_float = cleaned_utf8.cast(pl.Float64, strict=False)
-        cleaned_float = pl.when(is_null_or_empty | raw_float.is_nan() | raw_float.is_infinite()).then(None).otherwise(raw_float)
-
-        # Then check if it's a whole number and cast to integer if so
-        return (pl.when(cleaned_float.is_null())
-                .then(None)
-                .when(cleaned_float == cleaned_float.round(0))
-                .then(cleaned_float.cast(pl.Int64, strict=False))
-                .otherwise(cleaned_float))

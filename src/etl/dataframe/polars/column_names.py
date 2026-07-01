@@ -4,7 +4,7 @@ from typing import Dict, List
 
 import polars as pl
 
-from ..common.utils import standardize_column_name
+from ..common.utils import standardize_column_name, to_pascal_case
 from ...logger import Logger
 
 logger = Logger().get_logger()
@@ -59,6 +59,5 @@ def column_names_to_pascal_case(df: pl.DataFrame) -> pl.DataFrame:
     :param df: Polars DataFrame
     :return: DataFrame with PascalCase column names
     """
-    new_columns = ["".join(standardize_column_name(name).title().split('_'))
-                   for name in df.columns]
+    new_columns = [to_pascal_case(name) for name in df.columns]
     return df.rename(dict(zip(df.columns, new_columns)))

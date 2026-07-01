@@ -1,9 +1,12 @@
 # src/etl/dataframe/spark/type_checkers.py
 """Type checking predicate functions for Spark columns."""
 
+import re
+
 from pyspark.sql import functions as spark_functions
 from pyspark.sql import Column
 
+from ..common.constants import NUMERIC_CLEANUP_CHARS
 from .config import ALL_BOOLEAN_VALUES, DATE_FORMATS, NUMERIC_PATTERN
 
 
@@ -13,11 +16,20 @@ def _is_null_or_empty(column: Column) -> Column:
 
 
 def _clean_numeric_string(column: Column) -> Column:
-    """Remove $, %, and , from a string column for numeric parsing."""
-    without_dollar = spark_functions.regexp_replace(column, r'[\$]', '')
-    without_percent = spark_functions.regexp_replace(without_dollar, r'[%]', '')
-    without_comma = spark_functions.regexp_replace(without_percent, r'[,]', '')
-    return without_comma
+    """Strip the shared numeric cleanup characters ($, %, ,) for numeric parsing."""
+    for char in NUMERIC_CLEANUP_CHARS:
+        column = spark_functions.regexp_replace(column, re.escape(char), '')
+    return column
+
+
+def _matches_or_empty(column: Column, check: Column) -> Column:
+    """Shared checker prelude: nulls never match, empty/whitespace-only strings
+    match any type (they clean to null under every parser), else defer to check."""
+    return spark_functions.when(
+        column.isNull(), spark_functions.lit(False)
+    ).when(
+        _is_null_or_empty(column), spark_functions.lit(True)
+    ).otherwise(check)
 
 
 def _try_parse_date(column: Column, source_timezone: str = "UTC") -> Column:
@@ -65,13 +77,7 @@ def _try_parse_date(column: Column, source_timezone: str = "UTC") -> Column:
 def is_boolean(column: Column) -> Column:
     """Native Spark SQL check if value can be parsed as boolean."""
     lowercase_value = spark_functions.lower(spark_functions.trim(column))
-    return spark_functions.when(
-        column.isNull(), spark_functions.lit(False)
-    ).when(
-        spark_functions.trim(column) == '', spark_functions.lit(True)
-    ).otherwise(
-        lowercase_value.isin(list(ALL_BOOLEAN_VALUES))
-    )
+    return _matches_or_empty(column, lowercase_value.isin(list(ALL_BOOLEAN_VALUES)))
 
 
 def is_integer(column: Column) -> Column:
@@ -80,34 +86,15 @@ def is_integer(column: Column) -> Column:
     matches_numeric_pattern = cleaned_value.rlike(NUMERIC_PATTERN)
     value_as_double = spark_functions.when(matches_numeric_pattern, cleaned_value.cast('double'))
     is_whole_number = value_as_double.isNotNull() & (value_as_double == spark_functions.floor(value_as_double))
-    return spark_functions.when(
-        column.isNull(), spark_functions.lit(False)
-    ).when(
-        spark_functions.trim(column) == '', spark_functions.lit(True)
-    ).otherwise(
-        matches_numeric_pattern & is_whole_number
-    )
+    return _matches_or_empty(column, matches_numeric_pattern & is_whole_number)
 
 
 def is_float(column: Column) -> Column:
     """Native Spark SQL check if value can be parsed as float."""
     cleaned_value = _clean_numeric_string(spark_functions.trim(column))
-    matches_numeric_pattern = cleaned_value.rlike(NUMERIC_PATTERN)
-    return spark_functions.when(
-        column.isNull(), spark_functions.lit(False)
-    ).when(
-        spark_functions.trim(column) == '', spark_functions.lit(True)
-    ).otherwise(
-        matches_numeric_pattern
-    )
+    return _matches_or_empty(column, cleaned_value.rlike(NUMERIC_PATTERN))
 
 
 def is_date(column: Column) -> Column:
     """Native Spark SQL check if value can be parsed as date."""
-    return spark_functions.when(
-        column.isNull(), spark_functions.lit(False)
-    ).when(
-        spark_functions.trim(column) == '', spark_functions.lit(True)
-    ).otherwise(
-        _try_parse_date(spark_functions.trim(column)).isNotNull()
-    )
+    return _matches_or_empty(column, _try_parse_date(spark_functions.trim(column)).isNotNull())

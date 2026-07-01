@@ -6,10 +6,9 @@ from typing import Callable, Optional
 
 from pyspark.sql import functions as spark_functions
 from pyspark.sql import Column, DataFrame
-from pyspark.sql.types import StringType
 
 from .config import SamplingConfig, TYPE_FALLBACK_HIERARCHY
-from .diagnostics import get_failed_value_samples
+from .diagnostics import count_conversion_failures, get_failed_value_samples
 from .type_checkers import is_boolean, is_integer, is_float, is_date
 from .type_parsers import parse_boolean, parse_integer, parse_float, parse_date
 
@@ -95,37 +94,6 @@ def infer_types_from_dataframe(
     return column_type_mapping
 
 
-def detect_conversion_failures(
-    original_df: DataFrame,
-    converted_df: DataFrame,
-    column_name: str,
-) -> int:
-    """Count values that became null after conversion (excluding empty strings).
-
-    Returns the number of values that were non-null/non-empty before but null after.
-    """
-    # Count non-null, non-empty in the original
-    original_non_null = original_df.select(
-        spark_functions.sum(
-            spark_functions.when(
-                spark_functions.col(column_name).isNotNull() &
-                (spark_functions.trim(spark_functions.col(column_name).cast(StringType())) != ''),
-                1
-            ).otherwise(0)
-        )
-    ).first()[0] or 0
-
-    # Count non-null in converted
-    converted_non_null = converted_df.select(
-        spark_functions.sum(
-            spark_functions.when(spark_functions.col(column_name).isNotNull(), 1).otherwise(0)
-        )
-    ).first()[0] or 0
-
-    # Failures are values that were valid but became null
-    return original_non_null - converted_non_null
-
-
 def get_parser_for_type(type_name: str, type_checks: list[dict]) -> Callable[[Column], Column] | None:
     """Get the parser function for a given type name."""
     if type_name == 'string':
@@ -160,7 +128,7 @@ def apply_type_with_retry(
     )
 
     # Check for conversion failures
-    failures = detect_conversion_failures(dataframe, converted_df, column_name)
+    failures = count_conversion_failures(dataframe, converted_df, column_name)
 
     if failures == 0:
         logger.info(f"Casting column '{column_name}' to {current_type}.")
@@ -196,7 +164,7 @@ def apply_type_with_retry(
             column_name, parser(spark_functions.col(column_name))
         )
 
-        failures = detect_conversion_failures(dataframe, converted_df, column_name)
+        failures = count_conversion_failures(dataframe, converted_df, column_name)
 
         if failures == 0:
             logger.info(f"Casting column '{column_name}' to {fallback_type} (fallback from {inferred_type}).")

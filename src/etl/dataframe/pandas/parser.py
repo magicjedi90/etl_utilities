@@ -4,11 +4,19 @@
 import pandas as pd
 from dateutil import parser
 
-from ..common.constants import TRUTHY_VALUES, FALSY_VALUES
+from ..common.constants import TRUTHY_VALUES, FALSY_VALUES, NUMERIC_CLEANUP_CHARS
 
 
 class Parser:
     """Parser class with static methods for parsing different data types."""
+
+    @staticmethod
+    def _clean_numeric_string(value) -> str:
+        """Strip the shared numeric cleanup characters ($, %, ,) and whitespace."""
+        cleaned = str(value)
+        for char in NUMERIC_CLEANUP_CHARS:
+            cleaned = cleaned.replace(char, '')
+        return cleaned.strip()
 
     @staticmethod
     def parse_boolean(value):
@@ -50,7 +58,7 @@ class Parser:
         """
         if pd.isnull(value):
             return None
-        cleaned_value = str(value).replace(',', '').replace('$', '').replace('%', '').strip()
+        cleaned_value = Parser._clean_numeric_string(value)
         if cleaned_value == '':
             return None
         return float(cleaned_value)
@@ -87,12 +95,9 @@ class Parser:
         Raises:
             ValueError: If the value is not a valid integer (has decimal part).
         """
-        if pd.isnull(value):
+        float_value = Parser.parse_float(value)
+        if float_value is None:
             return None
-        cleaned_value = str(value).replace(',', '').replace('$', '').replace('%', '').strip()
-        if cleaned_value == '':
-            return None
-        float_value = float(cleaned_value)
         int_value = int(float_value)
         if float_value == int_value:
             return int_value

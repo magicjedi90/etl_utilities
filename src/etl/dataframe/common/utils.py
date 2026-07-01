@@ -41,3 +41,16 @@ def standardize_column_name(name) -> str:
     return (name.replace('.', '_').replace(':', '_').replace(' ', '_')
             .replace('-', '_').replace('___', '_').replace('__', '_')
             .strip('_'))
+
+
+def to_pascal_case(name) -> str:
+    """
+    Standardize a column name and convert it to PascalCase.
+
+    Args:
+        name: The column name to be converted.
+
+    Returns:
+        The column name in PascalCase.
+    """
+    return "".join(standardize_column_name(name).title().split('_'))

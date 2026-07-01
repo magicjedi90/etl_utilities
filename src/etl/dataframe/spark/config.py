@@ -1,9 +1,14 @@
-# src/etl/dataframe/spark/constants.py
+# src/etl/dataframe/spark/config.py
 """Configuration constants and dataclasses for Spark type inference and cleaning."""
 
 import dataclasses
 
-from ..common.constants import TRUTHY_VALUES, FALSY_VALUES, ALL_BOOLEAN_VALUES
+from ..common.constants import (
+    TRUTHY_VALUES,
+    FALSY_VALUES,
+    ALL_BOOLEAN_VALUES,
+    SPARK_DATE_FORMATS,
+)
 
 
 @dataclasses.dataclass(slots=True, frozen=True)
@@ -34,26 +39,9 @@ __all__ = [
     "ALL_BOOLEAN_VALUES",
 ]
 
-# Common date formats to try (ordered by specificity)
-DATE_FORMATS = [
-    "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
-    "yyyy-MM-dd'T'HH:mm:ss.SSS",
-    "yyyy-MM-dd'T'HH:mm:ssXXX",
-    "yyyy-MM-dd'T'HH:mm:ss",
-    "yyyy-MM-dd HH:mm:ss.SSS",
-    "yyyy-MM-dd HH:mm:ss",
-    "yyyy-MM-dd",
-    "MM/dd/yyyy HH:mm:ss",
-    "MM/dd/yyyy",
-    "MM-dd-yyyy",
-    "dd/MM/yyyy",
-    "dd-MM-yyyy",
-    "yyyy/MM/dd",
-    "yyyyMMdd",
-    "MMM dd, yyyy",
-    "dd MMM yyyy",
-    "MMMM dd, yyyy",
-]
+# Common date formats to try (ordered by specificity) — the canonical set
+# lives in common/constants.py, shared with the Polars backend.
+DATE_FORMATS = list(SPARK_DATE_FORMATS)
 
 # Regex pattern for numeric values (integer or float, with optional sign)
 NUMERIC_PATTERN = r'^-?[0-9]+\.?[0-9]*$'

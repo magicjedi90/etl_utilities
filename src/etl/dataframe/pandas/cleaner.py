@@ -7,7 +7,7 @@ import pandas as pd
 from dateutil import parser as dateutil_parser
 
 from .parser import Parser
-from ..common.utils import standardize_column_name, compute_hash
+from ..common.utils import standardize_column_name, compute_hash, to_pascal_case
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class Cleaner:
     @staticmethod
     def column_names_to_pascal_case(df: pd.DataFrame) -> None:
         """Convert DataFrame column names to PascalCase in place."""
-        df.columns = ["".join(standardize_column_name(name).title().split('_')) for name in df.columns]
+        df.columns = [to_pascal_case(name) for name in df.columns]
 
     @staticmethod
     def clean_series(series: pd.Series, clean_function) -> pd.Series:
