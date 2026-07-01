@@ -7,7 +7,7 @@ name = "etl_utilities"
 dynamic = ["version"]
 description = 'An ETL framework for data cleaning, type inference, SQL generation, and database loading across Pandas, Polars, and Spark DataFrames and MSSQL, MySQL/MariaDB, and PostgreSQL backends.'
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = "MIT"
 keywords = ["etl", "pandas", "polars", "spark", "cleaning", "etl-utilities", "utilities", "database", "dataframe", "parquet"]
 authors = [
@@ -16,8 +16,6 @@ authors = [
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -35,6 +33,10 @@ dependencies = [
     "rich",
     "psycopg2-binary",
     "pyspark",
+]
+
+[dependency-groups]
+dev = [
     "pytest>=8.3.5",
 ]
 
