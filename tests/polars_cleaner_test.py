@@ -112,11 +112,12 @@ class TestPolarsCleaner:
         # Columns preserved
         assert df.columns == ['customer_name', 'age', 'salary', 'is_active', 'join_date', 'performance_score']
 
-        # Exact dtypes
+        # Exact dtypes — whole-number columns become integers (then downcast),
+        # columns with fractional values stay Float64
         assert df['customer_name'].dtype == pl.String
         assert df['is_active'].dtype == pl.Boolean
         assert df['join_date'].dtype == pl.Datetime
-        assert df['age'].dtype == pl.Float64
+        assert df['age'].dtype == pl.UInt8
         assert df['salary'].dtype == pl.Float64
         assert df['performance_score'].dtype == pl.Float64
 
@@ -131,7 +132,7 @@ class TestPolarsCleaner:
         assert df['join_date'][4] is None
 
         # Numeric values
-        assert df['age'].to_list() == [25.0, 30.0, 35.0, None, None]
+        assert df['age'].to_list() == [25, 30, 35, None, None]
         assert df['salary'].to_list() == [50000.0, 65000.0, 75000.5, 80000.0, None]
         assert df['performance_score'].to_list() == [85.0, 92.5, 78.0, 88.5, None]
 
@@ -190,8 +191,8 @@ class TestPolarsCleaner:
 
         cleaned = PolarsCleaner.clean_all_types(df)
 
-        assert cleaned['age'].dtype == pl.Float64
-        assert cleaned['age'].to_list() == [25.0, None, 30.0, None, None]
+        assert cleaned['age'].dtype == pl.UInt8
+        assert cleaned['age'].to_list() == [25, None, 30, None, None]
         assert cleaned['name'].dtype == pl.String
 
     def test_clean_all_types_with_empty_strings(self):
@@ -203,11 +204,11 @@ class TestPolarsCleaner:
         })
         cleaned = PolarsCleaner.clean_all_types(df)
 
-        assert cleaned['numbers'].dtype == pl.Float64
+        assert cleaned['numbers'].dtype == pl.UInt8
         assert cleaned['bools'].dtype == pl.Boolean
         assert cleaned['dates'].dtype == pl.Datetime
 
-        assert cleaned['numbers'].to_list() == [100.0, None, 200.0, None]
+        assert cleaned['numbers'].to_list() == [100, None, 200, None]
         assert cleaned['bools'].to_list() == [True, None, False, None]
         assert cleaned['dates'][0] == datetime.datetime(2021, 1, 1)
         assert cleaned['dates'][1] is None
@@ -409,8 +410,8 @@ class TestPolarsCleaner:
         """Override for a column not in the DataFrame is silently ignored."""
         df = pl.DataFrame({'x': ['1', '2', '3']})
         result = PolarsCleaner.clean_all_types(df, type_overrides={'missing_col': pl.Int64})
-        # Should not raise — just cleans normally
-        assert result['x'].dtype == pl.Float64
+        # Should not raise — just cleans normally (whole numbers -> int, downcast)
+        assert result['x'].dtype == pl.UInt8
 
     def test_type_overrides_mixed_with_inference(self):
         """Some columns overridden, others inferred normally."""
@@ -451,6 +452,21 @@ class TestPolarsCleaner:
         # User asked for Int64, should stay Int64 (not downcasted)
         assert result['small'].dtype == pl.Int64
 
+    def test_clean_all_types_matches_cleaning_plan(self):
+        """Regression: the one-shot path and infer+apply must agree (no drift)."""
+        df = pl.DataFrame({
+            'ints': ['1', '2', '300'],
+            'floats': ['1.5', '2', '3'],
+            'flags': ['yes', 'no', 'true'],
+            'dates': ['2023-01-15', '2023/02/20', 'March 15, 2023'],
+            'text': ['a', 'b', 'c'],
+        })
+        one_shot = PolarsCleaner.clean_all_types(df)
+        plan = PolarsCleaner.infer_cleaning_plan(df)
+        via_plan = PolarsCleaner.apply_cleaning_plan(df, plan, optimize=True)
+        assert one_shot.schema == via_plan.schema
+        assert one_shot.to_dicts() == via_plan.to_dicts()
+
     def test_edge_case_all_null_column_skipped(self):
         """clean_all_types skips all-null columns and still cleans others."""
         df = pl.DataFrame({
@@ -458,8 +474,8 @@ class TestPolarsCleaner:
             'null_col': [None, None, None],
         })
         result = PolarsCleaner.clean_all_types(df)
-        assert result['int_col'].dtype == pl.Float64
-        assert result['int_col'].to_list() == [100.0, 200.0, 300.0]
+        assert result['int_col'].dtype == pl.UInt16
+        assert result['int_col'].to_list() == [100, 200, 300]
         assert result['null_col'].dtype == pl.Null
 
 if __name__ == "__main__":

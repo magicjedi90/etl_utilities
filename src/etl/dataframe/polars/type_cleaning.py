@@ -3,19 +3,43 @@
 
 The in-memory cleaning family: clean a single column family (numbers/dates/
 bools), infer-and-cast every column in one pass (clean_all_types), and the
-clean_df orchestrator that drops empty columns first. For schema-stable
-batch/streaming cleaning use cleaning_plan.infer_cleaning_plan/apply_cleaning_plan.
+clean_df orchestrator that drops empty columns first.
+
+clean_all_types delegates its decisions to cleaning_plan.infer_cleaning_plan
+and applies them with cleaning_plan.apply_cleaning_plan — it is the one-shot
+wrapper over the same logic the batch/streaming API uses, so the two paths
+cannot drift.
 """
 import time
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import polars as pl
 
+from .cleaning_plan import _infer_plan_with_counts, apply_cleaning_plan
 from .parser import PolarsParser
 from .schema_tools import optimize_dtypes
 from ...logger import Logger
 
 logger = Logger().get_logger()
+
+
+def _clean_columns(
+    df: pl.DataFrame,
+    columns: Optional[List[str]],
+    expr_builder: Callable[[str], pl.Expr],
+    kind: str,
+) -> pl.DataFrame:
+    """Apply one parser expression to each target column, keeping failures as-is."""
+    if columns is None:
+        columns = df.columns
+
+    for column in columns:
+        try:
+            df = df.with_columns(expr_builder(column).alias(column))
+        except Exception as e:
+            logger.debug(f"Column {column} could not be cleaned as {kind}: {e}")
+
+    return df
 
 
 def clean_numbers(df: pl.DataFrame, columns: Optional[List[str]] = None) -> pl.DataFrame:
@@ -25,20 +49,7 @@ def clean_numbers(df: pl.DataFrame, columns: Optional[List[str]] = None) -> pl.D
     :param columns: List of columns to clean (if None, clean all columns)
     :return: DataFrame with cleaned numeric columns
     """
-    if columns is None:
-        columns = df.columns
-
-    for column in columns:
-        try:
-            # Use the parse_integer_expr from PolarsParser which handles
-            # float cleaning and integer conversion for whole numbers
-            df = df.with_columns(
-                PolarsParser.parse_integer_expr(column).alias(column)
-            )
-        except Exception as e:
-            logger.debug(f"Column {column} could not be cleaned as number: {e}")
-
-    return df
+    return _clean_columns(df, columns, PolarsParser.parse_integer_expr, "number")
 
 
 def clean_dates(df: pl.DataFrame, columns: Optional[List[str]] = None) -> pl.DataFrame:
@@ -48,19 +59,7 @@ def clean_dates(df: pl.DataFrame, columns: Optional[List[str]] = None) -> pl.Dat
     :param columns: List of columns to clean (if None, clean all columns)
     :return: DataFrame with cleaned date columns
     """
-    if columns is None:
-        columns = df.columns
-
-    for column in columns:
-        try:
-            df = df.with_columns(
-                PolarsParser.parse_date_expr(column)
-                .alias(column)
-            )
-        except Exception as e:
-            logger.debug(f"Column {column} could not be cleaned as date: {e}")
-
-    return df
+    return _clean_columns(df, columns, PolarsParser.parse_date_expr, "date")
 
 
 def clean_bools(df: pl.DataFrame, columns: Optional[List[str]] = None) -> pl.DataFrame:
@@ -70,19 +69,34 @@ def clean_bools(df: pl.DataFrame, columns: Optional[List[str]] = None) -> pl.Dat
     :param columns: List of columns to clean (if None, clean all columns)
     :return: DataFrame with cleaned boolean columns
     """
-    if columns is None:
-        columns = df.columns
+    return _clean_columns(df, columns, PolarsParser.parse_boolean_expr, "boolean")
 
-    for column in columns:
-        try:
-            df = df.with_columns(
-                PolarsParser.parse_boolean_expr(column)
-                .alias(column)
-            )
-        except Exception as e:
-            logger.debug(f"Column {column} could not be cleaned as boolean: {e}")
 
-    return df
+def _filter_overrides(df: pl.DataFrame, type_overrides: Optional[Dict[str, pl.DataType]]) -> Dict[str, pl.DataType]:
+    """Keep only overrides for columns present in the frame, warning on the rest."""
+    if not type_overrides:
+        return {}
+    for col in type_overrides:
+        if col not in df.columns:
+            logger.warning(f"type_overrides column '{col}' not found in DataFrame, ignoring")
+    return {col: dtype for col, dtype in type_overrides.items() if col in df.columns}
+
+
+def _log_plan_decisions(plan: Dict[str, str], counts: Dict, overrides: Dict[str, pl.DataType]) -> None:
+    """Log empty-column skips and a per-kind summary of the inferred plan."""
+    for column, kind in plan.items():
+        if kind == "keep" and counts.get(f"{column}__orig") == 0:
+            logger.info(f"{column} is empty, skipping cleaning")
+
+    decisions: Dict[str, List[str]] = {}
+    for column, kind in plan.items():
+        decisions.setdefault(kind, []).append(column)
+    if overrides:
+        decisions["override"] = list(overrides)
+    for kind, cols in decisions.items():
+        names = ", ".join(cols[:10])
+        suffix = f" ... +{len(cols) - 10} more" if len(cols) > 10 else ""
+        logger.debug(f"  {kind}: {names}{suffix}")
 
 
 def clean_all_types(
@@ -91,11 +105,12 @@ def clean_all_types(
     type_overrides: Optional[Dict[str, pl.DataType]] = None,
 ) -> pl.DataFrame:
     """
-    Perform comprehensive cleaning on all columns by trying different parsing functions.
-    Strategy:
-    - Build safe expressions for bool, number, and date that return None for incompatible values.
-    - Coalesce them in priority order, falling back to the original value to avoid data loss.
-    - Apply for all target columns in a single pass for efficiency.
+    Perform comprehensive cleaning on all columns by inferring the best dtype
+    per column (bool/int/float/datetime, else keep) and casting in one pass.
+
+    Decisions come from cleaning_plan.infer_cleaning_plan with its all-or-nothing
+    default: a parser must cover every non-null, non-blank value to win a column.
+
     :param df: Polars DataFrame
     :param columns: List of columns to clean (if None, clean all columns)
     :param type_overrides: Dict mapping column names to Polars DataTypes.
@@ -105,178 +120,20 @@ def clean_all_types(
     if columns is None:
         columns = df.columns
 
-    if type_overrides is None:
-        type_overrides = {}
-
-    # Filter out overrides for columns not present in the DataFrame
-    overrides = {col: dtype for col, dtype in type_overrides.items() if col in df.columns}
-    for col in type_overrides:
-        if col not in df.columns:
-            logger.warning(f"type_overrides column '{col}' not found in DataFrame, ignoring")
-
-    if not columns and not overrides:
-        return optimize_dtypes(df)
-
-    row_count = len(df)
-    col_count = len(columns)
-    logger.debug(f"clean_all_types: {row_count:,} rows x {col_count} columns")
-
-    # --- Phase 1: single scan to find empty columns ---
-    phase_start = time.perf_counter()
-    non_null_counts = df.select([
-        pl.col(col).is_not_null().sum().alias(col) for col in columns
-    ]).row(0, named=True)
-
-    # Overridden columns skip inference entirely
+    overrides = _filter_overrides(df, type_overrides)
     infer_candidates = [col for col in columns if col not in overrides]
-    non_empty = [col for col in infer_candidates if non_null_counts[col] > 0]
-    empty_cols = [col for col in infer_candidates if non_null_counts[col] == 0]
-    for col in empty_cols:
-        logger.info(f"{col} is empty, skipping cleaning")
-    phase_duration = time.perf_counter() - phase_start
-    logger.debug(
-        f"  phase 1/4 null scan: {len(non_empty)} non-empty, "
-        f"{len(empty_cols)} empty ({phase_duration:.2f}s)"
-    )
+    logger.debug(f"clean_all_types: {len(df):,} rows x {len(infer_candidates)} columns")
 
-    if not non_empty and not overrides:
-        return optimize_dtypes(df)
+    plan, counts = _infer_plan_with_counts(df, infer_candidates, threshold=1.0, prefer_float=False)
+    _log_plan_decisions(plan, counts, overrides)
 
-    # --- Phase 2: build parse expressions for all non-empty columns ---
-    phase_start = time.perf_counter()
-    count_exprs = []
-    column_info = {}  # col -> (bool_expr, num_expr, date_expr)
-    all_counts = {}
-
-    for column in non_empty:
-        original = pl.col(column)
-        # Treat empty or whitespace-only strings as nulls for the purpose of
-        # determining if a parser covers all meaningful values. This allows
-        # columns with empty strings to still be cast to their numeric/date/bool
-        # dtypes while preserving empties as nulls.
-        original_utf8 = original.cast(pl.Utf8, strict=False)
-        original_stripped = original_utf8.str.strip_chars()
-        effective_original = (
-            pl.when(original_stripped == "")
-            .then(None)
-            .otherwise(original)
-        )
-        bool_expr = PolarsParser.parse_boolean_expr(column)
-        num_expr = PolarsParser.parse_integer_expr(column)
-        # Use fast vectorized date parsing for both counting and application.
-        # Date only wins when date_cnt == original_count, meaning vectorized
-        # already parsed everything — no need for the expensive dateutil fallback.
-        date_expr = PolarsParser.parse_date_expr_vectorized(column)
-
-        column_info[column] = (bool_expr, num_expr, date_expr)
-
-        count_exprs.extend([
-            effective_original.is_not_null().sum().alias(f"{column}__orig"),
-            bool_expr.is_not_null().sum().alias(f"{column}__bool"),
-            num_expr.is_not_null().sum().alias(f"{column}__num"),
-            date_expr.is_not_null().sum().alias(f"{column}__date"),
+    if overrides:
+        df = df.with_columns([
+            pl.col(column).cast(dtype, strict=False).alias(column)
+            for column, dtype in overrides.items()
         ])
-
-    phase_duration = time.perf_counter() - phase_start
-    logger.debug(
-        f"  phase 2/4 build expressions: "
-        f"{len(count_exprs)} aggregations for {len(non_empty)} columns ({phase_duration:.2f}s)"
-    )
-
-    # --- Phase 3: single scan to count parse successes ---
-    phase_start = time.perf_counter()
-    if count_exprs:
-        try:
-            all_counts = df.select(count_exprs).row(0, named=True)
-        except Exception as e:
-            logger.debug(f"Batched count evaluation failed: {e}")
-            logger.error(f"  phase 3/4 type probing FAILED: {e}")
-            all_counts = {}
-
-    phase_duration = time.perf_counter() - phase_start
-    logger.debug(f"  phase 3/4 type probing: ({phase_duration:.2f}s)")
-
-    # --- Phase 4: choose best parser per column and apply in a single pass ---
-    phase_start = time.perf_counter()
-    cleaning_expressions = []
-    type_decisions = {"bool": [], "num": [], "date": [], "string": [], "empty": [], "override": []}
-
-    # Apply overrides first — direct cast, no inference
-    for column, target_dtype in overrides.items():
-        cleaning_expressions.append(pl.col(column).cast(target_dtype, strict=False).alias(column))
-        type_decisions["override"].append(column)
-
-    for column in columns:
-        if column in overrides:
-            continue
-        if column not in column_info:
-            # Empty column — keep as-is
-            cleaning_expressions.append(pl.col(column))
-            type_decisions["empty"].append(column)
-            continue
-
-        original_count = all_counts[f"{column}__orig"]
-        bool_count = all_counts[f"{column}__bool"]
-        numeric_count = all_counts[f"{column}__num"]
-        date_count = all_counts[f"{column}__date"]
-
-        bool_expr, num_expr, date_expr = column_info[column]
-
-        # Choose the best parser among bool/num/date based on highest non-null count
-        # Tie-breaker priority: bool > num > date
-        candidates = [
-            (bool_count, 'bool'),
-            (numeric_count, 'num'),
-            (date_count, 'date'),
-        ]
-        # Sort by count desc, then by priority order as listed
-        candidates.sort(key=lambda x: x[0], reverse=True)
-        top_count, top_kind = candidates[0]
-        # For now only convert if all elements are cleaned - potentially add in a threshold later
-        if top_count == original_count and top_count > 0:
-            if top_kind == 'bool':
-                chosen = bool_expr
-            elif top_kind == 'num':
-                chosen = num_expr
-            else:
-                chosen = date_expr
-            type_decisions[top_kind].append(column)
-        else:
-            chosen = pl.col(column)
-            type_decisions["string"].append(column)
-
-        cleaning_expressions.append(chosen.alias(column))
-
-    df = df.with_columns(cleaning_expressions)
-    phase_duration = time.perf_counter() - phase_start
-
-    # Summarize decisions
-    parts = []
-    for kind, label in [("bool", "bool"), ("num", "numeric"), ("date", "date"),
-                        ("string", "string"), ("empty", "empty"), ("override", "override")]:
-        cols = type_decisions[kind]
-        if cols:
-            parts.append(f"{len(cols)} {label}")
-    logger.debug(
-        f"  phase 4/4 apply transforms: {', '.join(parts)} ({phase_duration:.2f}s)"
-    )
-    for kind, label in [("bool", "boolean"), ("num", "numeric"), ("date", "datetime"),
-                        ("string", "string (unchanged)"), ("empty", "empty (skipped)"),
-                        ("override", "override (user-specified)")]:
-        cols = type_decisions[kind]
-        if cols:
-            names = ", ".join(cols[:10])
-            suffix = f" ... +{len(cols) - 10} more" if len(cols) > 10 else ""
-            logger.debug(f"    {label}: {names}{suffix}")
-
-    phase_start = time.perf_counter()
-    override_cols = set(overrides.keys())
-    df = optimize_dtypes(df, skip_columns=override_cols)
-    phase_duration = time.perf_counter() - phase_start
-    if phase_duration > 0.01:
-        logger.debug(f"  optimize_dtypes: ({phase_duration:.2f}s)")
-
-    return df
+    df = apply_cleaning_plan(df, plan)
+    return optimize_dtypes(df, skip_columns=set(overrides))
 
 
 def clean_df(

@@ -106,8 +106,15 @@ class PolarsParser:
         """
         expr_utf8 = pl.col(column).cast(pl.Utf8, strict=False)
         vectorized = PolarsParser.parse_date_expr_vectorized(column)
-        # Fallback to dateutil for anything the vectorized passes couldn't parse
-        dateutil_fallback = expr_utf8.map_elements(
+        # Fallback to dateutil, but only for values the vectorized pass missed —
+        # values it already parsed are masked to null and skipped, so the
+        # Python-level fallback costs nothing when the fast path covers everything.
+        unmatched = (
+            pl.when(vectorized.is_null())
+            .then(expr_utf8)
+            .otherwise(pl.lit(None, dtype=pl.Utf8))
+        )
+        dateutil_fallback = unmatched.map_elements(
             PolarsParser.parse_date,
             return_dtype=pl.Datetime,
             skip_nulls=True,
