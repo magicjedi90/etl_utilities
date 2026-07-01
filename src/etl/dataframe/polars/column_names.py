@@ -36,7 +36,8 @@ def column_names_to_snake_case(df: pl.DataFrame, on_collision: str = "coalesce")
         raise ValueError(f"snake_case name collisions: {collisions}")
 
     if on_collision == "suffix":
-        rename_map, seen = {}, {}
+        rename_map: Dict[str, str] = {}
+        seen: Dict[str, int] = {}
         for orig, snake in zip(df.columns, new_names):
             n = seen.get(snake, 0)
             seen[snake] = n + 1

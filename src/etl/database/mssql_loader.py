@@ -49,7 +49,8 @@ class MsSqlLoader(Loader):
         data = [tuple(row) for row in df.itertuples(index=False, name=None)]
 
         # Perform the bulk insert
-        cursor.fast_executemany = True
+        # pyodbc-specific attribute, not part of the DBAPICursor protocol
+        cursor.fast_executemany = True  # type: ignore[attr-defined]
         progress_location = location.replace('[', '').replace(']', '').replace('`', '')
         with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(),
                       MofNCompleteColumn()) as progress:

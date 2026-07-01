@@ -17,7 +17,7 @@ from src.etl.dataframe.spark.diagnostics import (
 class SparkTestCase(unittest.TestCase):
     """Base class for Spark tests with shared session management."""
 
-    spark: SparkSession = None
+    spark: SparkSession
 
     @classmethod
     def setUpClass(cls):

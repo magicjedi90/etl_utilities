@@ -70,6 +70,7 @@ def infer_types_from_dataframe(
 
     # Execute a single aggregation to get all statistics
     statistics_row = dataframe.agg(*aggregation_expressions).first()
+    assert statistics_row is not None  # a global aggregation always yields one row
 
     # Determine the best type for each column based on collected stats
     column_type_mapping: dict[str, Optional[dict]] = {}

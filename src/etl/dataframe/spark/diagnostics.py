@@ -99,6 +99,7 @@ def get_conversion_diagnostics(
                 spark_functions.when(_non_null_non_empty(column_name), 1).otherwise(0)
             ).alias("non_null_non_empty"),
         ).first()
+        assert original_stats is not None  # a global aggregation always yields one row
 
         total_values = original_stats["total"] or 0
         original_null_count = original_stats["nulls"] or 0

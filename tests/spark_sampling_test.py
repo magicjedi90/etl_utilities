@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests for Spark DataFrame sampling configuration and fallback behavior."""
+from pyspark.sql import DataFrame
 from pyspark.sql.types import StructType, StructField, StringType
 
 from tests.conftest_spark import SparkTestCase

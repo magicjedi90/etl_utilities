@@ -67,7 +67,7 @@ class SparkCleaner:
         sample_df = get_sample(cached_dataframe, sampling_config, total_rows)
         use_sampling = sample_df is not None
 
-        if use_sampling:
+        if sample_df is not None:
             logger.info(f"Using sampling for type inference (config: fraction={sampling_config.fraction}, "
                        f"min_rows={sampling_config.min_rows}, max_rows={sampling_config.max_rows})")
             # Cache sample for efficient reuse
@@ -134,6 +134,7 @@ class SparkCleaner:
             for column_name in cleaned_dataframe.columns
         ]
         null_counts = cleaned_dataframe.select(null_count_expressions).first()
+        assert null_counts is not None  # a global aggregation always yields one row
 
         total_rows = cleaned_dataframe.count()
         columns_to_drop = [

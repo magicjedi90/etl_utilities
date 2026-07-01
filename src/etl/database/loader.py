@@ -47,8 +47,8 @@ class Loader:
         with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn(),
                       MofNCompleteColumn()) as progress:
             total = df.shape[0]
-            row_placeholder = []
-            data_list = []
+            row_placeholder: list[str] = []
+            data_list: list = []
             data_count = 0
             row_count = 0
             progress_location = location.replace('[', '').replace(']', '').replace('`', '')

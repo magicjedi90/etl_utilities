@@ -78,7 +78,8 @@ class Loader:
         self._placeholder = self._dialect.placeholder
         self._max_rows_per_query = math.floor(MAX_PARAM_PER_STATEMENT // len(df.columns))
         if self._dialect.name == "mssql":
-            self._cursor.fast_executemany = True
+            # pyodbc-specific attribute, not part of the DBAPICursor protocol
+            self._cursor.fast_executemany = True  # type: ignore[attr-defined]
 
     def _prepare_data(self) -> list[str]:
         """Prepare a DBAPI-ready copy of the DataFrame; returns the placeholders."""

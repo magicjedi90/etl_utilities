@@ -28,13 +28,18 @@ class DatabaseUtils:
     def __init__(self, connection: PoolProxiedConnection):
         self.connection = connection
 
+    def _read_sql(self, query: str) -> DataFrame:
+        # pandas-stubs only accepts SQLAlchemy connectables here, but a pooled
+        # DBAPI connection works at runtime (pandas emits a UserWarning).
+        return pd.read_sql(query, self.connection)  # type: ignore[call-overload]
+
     def get_table_list(self, schema: str) -> list:
         assert_safe_identifier(schema)
         query = (
             f"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
             f"WHERE TABLE_SCHEMA = '{schema}' AND TABLE_TYPE = 'BASE TABLE';"
         )
-        return pd.read_sql(query, self.connection)['TABLE_NAME'].tolist()
+        return self._read_sql(query)['TABLE_NAME'].tolist()
 
     def get_column_names_and_types(self, schema: str, table: str) -> DataFrame:
         assert_safe_identifier(schema)
@@ -43,7 +48,7 @@ class DatabaseUtils:
             f"SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS "
             f"WHERE TABLE_SCHEMA = '{schema}' AND TABLE_NAME = '{table}';"
         )
-        return pd.read_sql(query, self.connection)
+        return self._read_sql(query)
 
     def get_column_info(self, schema: str, table: str) -> DataFrame:
         """Column name/type/length/precision metadata for one table."""
@@ -54,11 +59,11 @@ class DatabaseUtils:
             f"FROM INFORMATION_SCHEMA.COLUMNS "
             f"WHERE TABLE_SCHEMA = '{schema}' AND TABLE_NAME = '{table}';"
         )
-        return pd.read_sql(query, self.connection)
+        return self._read_sql(query)
 
     def get_column_data(self, schema: str, table: str, column: str) -> pd.Series:
         assert_safe_identifier(schema)
         assert_safe_identifier(table)
         assert_safe_identifier(column)
         query = f"SELECT DISTINCT [{column}] FROM {schema}.{table}"
-        return pd.read_sql(query, self.connection)[column].dropna()
+        return self._read_sql(query)[column].dropna()

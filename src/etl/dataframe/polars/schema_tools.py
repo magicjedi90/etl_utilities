@@ -51,7 +51,7 @@ def optimize_dtypes(df: pl.DataFrame, skip_columns: Optional[set] = None) -> pl.
         if min_val is None or max_val is None:
             continue
 
-        target_dtype = None
+        target_dtype: Optional[type[pl.DataType]] = None
         if min_val >= 0:
             if max_val <= 255:
                 target_dtype = pl.UInt8
@@ -123,7 +123,7 @@ def localize_naive_datetimes(df: pl.DataFrame, tz: str = "UTC") -> pl.DataFrame:
     return df.with_columns([pl.col(c).dt.replace_time_zone(tz) for c in naive])
 
 
-def cast_null_columns(df: pl.DataFrame, to: pl.DataType = pl.Utf8) -> pl.DataFrame:
+def cast_null_columns(df: pl.DataFrame, to: pl.DataType | type[pl.DataType] = pl.Utf8) -> pl.DataFrame:
     """
     Cast columns whose dtype is pl.Null (all-null in this frame) to `to` (default Utf8).
 

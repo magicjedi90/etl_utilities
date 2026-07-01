@@ -48,7 +48,7 @@ def unify_parquet_schemas(paths, filesystem=None, max_workers: int = 4) -> pa.Sc
             logger.warning(f"  Skipping unreadable file {path}: {type(e).__name__}: {e}")
             return None
 
-    column_types = {}
+    column_types: dict[str, set] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         for schema in ex.map(_read_schema, paths):
             if schema is None:

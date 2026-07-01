@@ -13,7 +13,7 @@ from src.etl.dataframe.spark.cleaner import SparkCleaner
 class SparkTestCase(unittest.TestCase):
     """Base class for Spark tests with shared session management and helpers."""
 
-    spark: SparkSession = None
+    spark: SparkSession
 
     @classmethod
     def setUpClass(cls):
