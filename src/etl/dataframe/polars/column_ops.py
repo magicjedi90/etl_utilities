@@ -32,9 +32,13 @@ def generate_hash_column(
     columns_to_hash: List[str],
     new_column_name: str,
     algorithm: str = "sha1",
+    separator: str = "",
 ) -> pl.DataFrame:
     """
     Generate a hash column based on specified columns.
+
+    Null components hash as the empty string, so a row is never given a null
+    hash just because one of its inputs is null.
     :param df: Polars DataFrame
     :param columns_to_hash: List of column names to include in hash
     :param new_column_name: Name for the new hash column
@@ -43,6 +47,10 @@ def generate_hash_column(
         persisted and compared later. "xxhash" uses Polars' vectorized, non-crypto
         UInt64 hash — much faster at scale, but not stable across Polars versions,
         so use it only for in-run dedup/change-detection.
+    :param separator: string placed between components before hashing. The
+        default "" matches the pandas Cleaner and keeps existing persisted hashes
+        valid, but lets ("ab", "c") and ("a", "bc") collide; pass e.g. "\x1f" for
+        new pipelines that have no stored hashes to preserve.
     :return: DataFrame with added hash column
     """
     # Validate inputs
@@ -56,9 +64,13 @@ def generate_hash_column(
     if new_column_name in df.columns:
         raise ValueError(f"Column '{new_column_name}' already exists in DataFrame")
 
-    concat = pl.concat_str([pl.col(col).cast(pl.Utf8) for col in columns_to_hash])
+    concat = pl.concat_str(
+        [pl.col(col).cast(pl.String) for col in columns_to_hash],
+        separator=separator,
+        ignore_nulls=True,
+    )
     if algorithm == "sha1":
-        hash_expr = concat.map_elements(compute_hash, return_dtype=pl.Utf8)
+        hash_expr = concat.map_elements(compute_hash, return_dtype=pl.String)
     elif algorithm == "xxhash":
         hash_expr = concat.hash()  # vectorized UInt64
     else:

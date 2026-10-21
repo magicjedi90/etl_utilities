@@ -1,3 +1,4 @@
+import datetime
 import logging
 import math
 import re
@@ -34,7 +35,7 @@ class PolarsParser:
         Handles empty strings and whitespace by converting them to null before boolean conversion.
         Fully vectorized — no Python-level row iteration.
         """
-        cleaned_utf8 = pl.col(column).cast(pl.Utf8, strict=False).str.strip_chars()
+        cleaned_utf8 = pl.col(column).cast(pl.String, strict=False).str.strip_chars()
         is_null_or_empty = cleaned_utf8.is_null() | (cleaned_utf8 == "")
         lowered = cleaned_utf8.str.to_lowercase()
 
@@ -72,14 +73,14 @@ class PolarsParser:
         cleanup) become null, and inf/nan are rejected — they parse as valid
         Float64 but are not meaningful numeric data.
         """
-        expr = pl.col(column).cast(pl.Utf8, strict=False).str.strip_chars()
+        expr = pl.col(column).cast(pl.String, strict=False).str.strip_chars()
 
         # Handle empty strings and whitespace by converting to null
         is_null_or_empty = expr.is_null() | (expr == "")
 
-        # Apply numeric cleanup patterns
-        for pattern, replacement in PolarsParser.NUMERIC_CLEANUP_PATTERNS:
-            expr = expr.str.replace_all(pattern, replacement)
+        # Strip the shared cleanup characters ($, %, ,) — literal, not regex
+        for char in NUMERIC_CLEANUP_CHARS:
+            expr = expr.str.replace_all(char, "", literal=True)
 
         # After cleanup, check again for empty strings (e.g., "$" -> "" after cleanup)
         is_null_or_empty = is_null_or_empty | (expr == "")
@@ -112,7 +113,7 @@ class PolarsParser:
         performance reasonable while being highly tolerant on messy inputs.
         All mismatches yield nulls (no exceptions).
         """
-        expr_utf8 = pl.col(column).cast(pl.Utf8, strict=False)
+        expr_utf8 = pl.col(column).cast(pl.String, strict=False)
         vectorized = PolarsParser.parse_date_expr_vectorized(column)
         # Fallback to dateutil, but only for values the vectorized pass missed —
         # values it already parsed are masked to null and skipped, so the
@@ -120,7 +121,7 @@ class PolarsParser:
         unmatched = (
             pl.when(vectorized.is_null())
             .then(expr_utf8)
-            .otherwise(pl.lit(None, dtype=pl.Utf8))
+            .otherwise(pl.lit(None, dtype=pl.String))
         )
         dateutil_fallback = unmatched.map_elements(
             PolarsParser.parse_date,
@@ -134,18 +135,26 @@ class PolarsParser:
         """
         Fast, vectorized date parsing using the shared date formats
         (first matching format wins per value).
+
+        Offset-carrying formats ("...Z", "...+05:00") parse to tz-aware UTC;
+        they are converted to naive UTC so every candidate shares one dtype and
+        the coalesce is well-defined. Naive inputs are assumed to already be UTC
+        (the library-wide convention).
         """
-        expr_utf8 = pl.col(column).cast(pl.Utf8, strict=False)
-        parsed_candidates = [
-            expr_utf8.str.strptime(pl.Datetime, fmt, strict=False)
-            for fmt in POLARS_DATE_FORMATS
-        ]
+        expr_utf8 = pl.col(column).cast(pl.String, strict=False)
+        parsed_candidates = []
+        for fmt in POLARS_DATE_FORMATS:
+            candidate = expr_utf8.str.strptime(pl.Datetime, fmt, strict=False)
+            if "%z" in fmt or "%#z" in fmt or "%:z" in fmt:
+                candidate = candidate.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
+            parsed_candidates.append(candidate)
         return pl.coalesce(parsed_candidates)
 
     @staticmethod
     def parse_date(value: Any) -> Optional[Any]:
         """
-        Parse a date value using dateutil.
+        Parse a date value using dateutil. Offset-aware results are converted to
+        naive UTC so they match the vectorized path.
         :param value: The value to be parsed as a date.
         :return: The parsed date value, or None if parsing fails.
         """
@@ -154,6 +163,9 @@ class PolarsParser:
         if isinstance(value, float) and math.isnan(value):
             return None
         try:
-            return parser.parse(str(value).strip())
-        except Exception:
+            parsed = parser.parse(str(value).strip())
+        except (ValueError, OverflowError, TypeError):
             return None
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return parsed

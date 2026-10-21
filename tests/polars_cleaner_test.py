@@ -480,3 +480,109 @@ class TestPolarsCleaner:
 
 if __name__ == "__main__":
     pytest.main(["-v", __file__])
+
+
+class TestPandasParity:
+    """Behaviors aligned with the pandas Cleaner (or deliberately safer)."""
+
+    def test_clean_family_without_columns_leaves_uncovered_columns_alone(self):
+        df = pl.DataFrame({"n": ["1", "2"], "name": ["alice", "bob"], "flag": ["yes", "no"]})
+        assert PolarsCleaner.clean_numbers(df)["name"].to_list() == ["alice", "bob"]
+        assert PolarsCleaner.clean_numbers(df)["n"].to_list() == [1.0, 2.0]
+        bools = PolarsCleaner.clean_bools(df)
+        assert bools["flag"].to_list() == [True, False]
+        assert bools["name"].to_list() == ["alice", "bob"]
+        dates = PolarsCleaner.clean_dates(df)
+        # dateutil would read "1" as a day-of-month; coverage uses vectorized formats only
+        assert dates["n"].to_list() == ["1", "2"]
+        assert dates["name"].to_list() == ["alice", "bob"]
+
+    def test_clean_family_without_columns_skips_already_typed(self):
+        df = pl.DataFrame({"i": [1, 0], "f": [1.5, 2.5], "b": [True, False]})
+        out = PolarsCleaner.clean_bools(df)
+        assert out.schema == df.schema
+
+    def test_explicit_columns_force_conversion(self):
+        df = pl.DataFrame({"n": ["1", "abc"]})
+        assert PolarsCleaner.clean_numbers(df, ["n"])["n"].to_list() == [1.0, None]
+
+    def test_explicit_missing_column_raises(self):
+        df = pl.DataFrame({"n": ["1"]})
+        with pytest.raises(ValueError, match="typo"):
+            PolarsCleaner.clean_numbers(df, ["typo"])
+        with pytest.raises(ValueError, match="typo"):
+            PolarsCleaner.clean_dates(df, ["typo"])
+        with pytest.raises(ValueError, match="typo"):
+            PolarsCleaner.clean_bools(df, ["typo"])
+
+    def test_int_out_of_int64_range_falls_back_to_float(self):
+        df = pl.DataFrame({"big": ["99999999999999999999", "1"]})
+        assert PolarsCleaner.infer_cleaning_plan(df) == {"big": "float64"}
+        out = PolarsCleaner.clean_all_types(df)
+        assert out.schema["big"] == pl.Float64
+        assert out["big"].to_list() == [1e20, 1.0]
+
+    def test_already_typed_columns_are_not_reparsed(self):
+        big = 9007199254740993  # 2**53 + 1: not representable as Float64
+        df = pl.DataFrame({
+            "id": [big, 1],
+            "f": [1.0, 0.0],
+            "d": [datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)],
+            "tz": [datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)] * 2,
+            "s": ["1", "0"],
+        })
+        plan = PolarsCleaner.infer_cleaning_plan(df)
+        assert plan == {"id": "keep", "f": "keep", "d": "keep", "tz": "keep", "s": "boolean"}
+        out = PolarsCleaner.clean_all_types(df)
+        assert out["id"].to_list() == [big, 1]
+        assert out.schema["f"] == pl.Float64
+        assert out.schema["d"] == pl.Date
+        assert out.schema["tz"].time_zone == "UTC"
+        assert out.schema["s"] == pl.Boolean
+
+    def test_clean_df_drops_all_null_rows(self):
+        df = pl.DataFrame({"a": ["1", None, "3"], "b": ["x", None, "z"]})
+        out = PolarsCleaner.clean_df(df)
+        assert len(out) == 2
+        assert out["a"].to_list() == [1, 3]
+
+    def test_clean_df_keeps_partially_null_rows(self):
+        df = pl.DataFrame({"a": ["1", None], "b": ["x", "y"]})
+        assert len(PolarsCleaner.clean_df(df)) == 2
+
+    def test_hash_with_null_component_is_not_null(self):
+        df = pl.DataFrame({"a": [1, None], "b": ["x", "y"]})
+        out = PolarsCleaner.generate_hash_column(df, ["a", "b"], "h")
+        assert out["h"].null_count() == 0
+        # null hashes as empty string: sha1("y")
+        assert out["h"][1] == compute_hash("y")
+
+    def test_hash_separator_distinguishes_boundaries(self):
+        df = pl.DataFrame({"a": ["ab", "a"], "b": ["c", "bc"]})
+        plain = PolarsCleaner.generate_hash_column(df, ["a", "b"], "h")["h"].to_list()
+        assert plain[0] == plain[1]  # documented collision with the default ""
+        sep = PolarsCleaner.generate_hash_column(df, ["a", "b"], "h", separator="|")["h"].to_list()
+        assert sep[0] != sep[1]
+
+    def test_offset_timestamps_infer_as_datetime_in_utc(self):
+        df = pl.DataFrame({"ts": [
+            "2024-01-01T10:00:00Z",
+            "2024-01-01T10:00:00+05:00",
+            "2024-01-01T10:00:00.250-05:00",
+            "2024-01-01T10:00:00",
+        ]})
+        assert PolarsCleaner.infer_cleaning_plan(df) == {"ts": "datetime"}
+        out = PolarsCleaner.clean_all_types(df)
+        assert out.schema["ts"] == pl.Datetime("us")  # naive, UTC by convention
+        assert out["ts"].to_list() == [
+            datetime.datetime(2024, 1, 1, 10, 0),
+            datetime.datetime(2024, 1, 1, 5, 0),
+            datetime.datetime(2024, 1, 1, 15, 0, 0, 250000),
+            datetime.datetime(2024, 1, 1, 10, 0),
+        ]
+
+    def test_dateutil_fallback_normalizes_offsets_to_utc(self):
+        # Not in the vectorized format list, so this goes through dateutil
+        df = pl.DataFrame({"ts": ["Jan 1 2024 10:00 +0500"]})
+        out = PolarsCleaner.clean_dates(df, ["ts"])
+        assert out["ts"].to_list() == [datetime.datetime(2024, 1, 1, 5, 0)]

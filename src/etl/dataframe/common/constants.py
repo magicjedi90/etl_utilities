@@ -13,13 +13,13 @@ NUMERIC_CLEANUP_CHARS = (',', '$', '%')
 
 # Recognized date/timestamp formats, ordered by specificity (first match wins).
 # One canonical set, spelled per engine: (chrono/strftime for Polars, Java
-# pattern for Spark). A None on the Polars side marks a Spark-only format —
-# offset-carrying formats parse to tz-aware values, which Polars cannot
-# coalesce with the naive results of the other formats.
+# pattern for Spark). Offset-carrying formats (%#z on the Polars side accepts
+# both "Z" and +-HH:MM) parse to tz-aware values; the Polars parser converts
+# those to UTC and drops the zone so they coalesce with the naive formats.
 DATE_FORMAT_PAIRS = (
-    (None, "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+    ("%Y-%m-%dT%H:%M:%S%.f%#z", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
     ("%Y-%m-%dT%H:%M:%S%.f", "yyyy-MM-dd'T'HH:mm:ss.SSS"),
-    (None, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+    ("%Y-%m-%dT%H:%M:%S%#z", "yyyy-MM-dd'T'HH:mm:ssXXX"),
     ("%Y-%m-%dT%H:%M:%S", "yyyy-MM-dd'T'HH:mm:ss"),
     ("%Y-%m-%d %H:%M:%S%.f", "yyyy-MM-dd HH:mm:ss.SSS"),
     ("%Y-%m-%d %H:%M:%S", "yyyy-MM-dd HH:mm:ss"),
@@ -36,5 +36,5 @@ DATE_FORMAT_PAIRS = (
     ("%B %d, %Y", "MMMM dd, yyyy"),
 )
 
-POLARS_DATE_FORMATS = tuple(p for p, _ in DATE_FORMAT_PAIRS if p is not None)
+POLARS_DATE_FORMATS = tuple(p for p, _ in DATE_FORMAT_PAIRS)
 SPARK_DATE_FORMATS = tuple(s for _, s in DATE_FORMAT_PAIRS)

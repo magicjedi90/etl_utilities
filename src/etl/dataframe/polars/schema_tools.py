@@ -29,7 +29,7 @@ def optimize_dtypes(df: pl.DataFrame, skip_columns: Optional[set] = None) -> pl.
     """
     if skip_columns is None:
         skip_columns = set()
-    int_cols = [col for col in df.columns if df[col].dtype == pl.Int64 and col not in skip_columns]
+    int_cols = [col for col, dtype in df.schema.items() if dtype == pl.Int64 and col not in skip_columns]
     if not int_cols:
         return df
 
@@ -95,11 +95,11 @@ def sanitize_float_columns(df: pl.DataFrame) -> pl.DataFrame:
             exprs.append(
                 pl.when(pl.col(name).is_finite()).then(pl.col(name)).otherwise(None).alias(name)
             )
-        elif dtype == pl.Utf8:
+        elif dtype == pl.String:
             normalized = pl.col(name).str.strip_chars().str.to_lowercase()
             exprs.append(
                 pl.when(normalized.is_in(list(_NONFINITE_STRINGS)))
-                .then(pl.lit(None, dtype=pl.Utf8))
+                .then(pl.lit(None, dtype=pl.String))
                 .otherwise(pl.col(name)).alias(name)
             )
     return df.with_columns(exprs) if exprs else df
@@ -123,14 +123,14 @@ def localize_naive_datetimes(df: pl.DataFrame, tz: str = "UTC") -> pl.DataFrame:
     return df.with_columns([pl.col(c).dt.replace_time_zone(tz) for c in naive])
 
 
-def cast_null_columns(df: pl.DataFrame, to: pl.DataType | type[pl.DataType] = pl.Utf8) -> pl.DataFrame:
+def cast_null_columns(df: pl.DataFrame, to: pl.DataType | type[pl.DataType] = pl.String) -> pl.DataFrame:
     """
-    Cast columns whose dtype is pl.Null (all-null in this frame) to `to` (default Utf8).
+    Cast columns whose dtype is pl.Null (all-null in this frame) to `to` (default String).
 
     An all-null batch infers Polars' Null dtype, which most sinks reject. Giving
     those columns a concrete dtype keeps schemas stable across batches/files.
     :param df: Polars DataFrame
-    :param to: target dtype for all-null columns (default Utf8)
+    :param to: target dtype for all-null columns (default String)
     :return: DataFrame with Null-dtype columns cast to `to`
     """
     null_cols = [c for c, dt in zip(df.columns, df.dtypes) if dt == pl.Null]

@@ -19,23 +19,44 @@ from .parser import PolarsParser
 from .schema_tools import optimize_dtypes
 
 
-def _probe_count_exprs(column: str) -> List[pl.Expr]:
-    """Aggregation expressions probing one column's bool/num/date parseability.
+# Largest magnitude a Float64 can hold and still cast to Int64 without
+# overflowing (2**63). Anything at or beyond this must stay float64.
+_INT64_LIMIT = float(2 ** 63)
 
-    Blank/whitespace-only strings count as null for coverage purposes, so a
-    column containing empties can still win a numeric/date/bool dtype while
-    preserving the empties as nulls.
+
+def is_already_typed(dtype: pl.DataType) -> bool:
+    """True when a column already carries a concrete non-string dtype.
+
+    Numeric, boolean, and temporal columns are left untouched by inference:
+    re-parsing them means a String -> Float64 round trip that loses precision on
+    integers above 2**53 and gains nothing.
+    """
+    return dtype.is_numeric() or dtype.is_temporal() or dtype == pl.Boolean
+
+
+def effective_non_null_expr(column: str) -> pl.Expr:
+    """Boolean expression: value is non-null and not a blank/whitespace string.
+
+    Blank strings count as null for coverage purposes, so a column containing
+    empties can still win a numeric/date/bool dtype while preserving the
+    empties as nulls.
     """
     original = pl.col(column)
-    stripped = original.cast(pl.Utf8, strict=False).str.strip_chars()
-    effective = pl.when(stripped == "").then(None).otherwise(original)
+    stripped = original.cast(pl.String, strict=False).str.strip_chars()
+    return pl.when(stripped == "").then(None).otherwise(original).is_not_null()
+
+
+def _probe_count_exprs(column: str) -> List[pl.Expr]:
+    """Aggregation expressions probing one column's bool/num/date parseability."""
     float_expr = PolarsParser.parse_float_expr(column)
+    int_safe = (float_expr.round(0) == float_expr) & (float_expr.abs() < _INT64_LIMIT)
     return [
-        effective.is_not_null().sum().alias(f"{column}__orig"),
+        effective_non_null_expr(column).sum().alias(f"{column}__orig"),
         PolarsParser.parse_boolean_expr(column).is_not_null().sum().alias(f"{column}__bool"),
         float_expr.is_not_null().sum().alias(f"{column}__num"),
         PolarsParser.parse_date_expr_vectorized(column).is_not_null().sum().alias(f"{column}__date"),
-        (float_expr.round(0) == float_expr).fill_null(True).all().alias(f"{column}__whole"),
+        # int64 is only safe when every parsed value is whole AND in Int64 range
+        int_safe.fill_null(True).all().alias(f"{column}__int_safe"),
     ]
 
 
@@ -54,8 +75,8 @@ def _decide_kind(counts: Dict, column: str, threshold: float, prefer_float: bool
     if not (effective_non_null > 0 and top_count > 0 and top_count >= threshold * effective_non_null):
         return "keep"
     if top_kind == "num":
-        # int64 only if every parsed value is whole; else float64.
-        if prefer_float or not counts[f"{column}__whole"]:
+        # int64 only if every parsed value is whole and fits Int64; else float64.
+        if prefer_float or not counts[f"{column}__int_safe"]:
             return "float64"
         return "int64"
     return top_kind
@@ -67,13 +88,23 @@ def _infer_plan_with_counts(
     threshold: float,
     prefer_float: bool,
 ) -> Tuple[Dict[str, str], Dict]:
-    """Infer a plan in a single scan; also return the raw probe counts (for logging)."""
+    """Infer a plan in a single scan; also return the raw probe counts (for logging).
+
+    Columns that already carry a numeric/boolean/temporal dtype are planned as
+    "keep" without probing (see is_already_typed).
+    """
     if not columns:
         return {}, {}
-    count_exprs = [expr for column in columns for expr in _probe_count_exprs(column)]
-    counts = df.select(count_exprs).row(0, named=True)
-    plan = {column: _decide_kind(counts, column, threshold, prefer_float) for column in columns}
-    return plan, counts
+    schema = df.schema
+    plan: Dict[str, str] = {column: "keep" for column in columns if is_already_typed(schema[column])}
+    probe_columns = [column for column in columns if column not in plan]
+    counts: Dict = {}
+    if probe_columns:
+        count_exprs = [expr for column in probe_columns for expr in _probe_count_exprs(column)]
+        counts = df.select(count_exprs).row(0, named=True)
+        plan.update({column: _decide_kind(counts, column, threshold, prefer_float) for column in probe_columns})
+    # Preserve caller order
+    return {column: plan[column] for column in columns}, counts
 
 
 def infer_cleaning_plan(
@@ -92,7 +123,10 @@ def infer_cleaning_plan(
 
     Plan values are one of:
         "boolean" | "int64" | "float64" | "datetime" | "utf8" | "keep"
-    "keep" leaves the column's existing dtype untouched.
+    "keep" leaves the column's existing dtype untouched. Columns that are
+    already numeric/boolean/temporal are always "keep" — they are not re-parsed.
+    Numeric columns are "int64" only when every value is whole and inside the
+    Int64 range; otherwise "float64".
 
     :param df: Polars DataFrame to infer from (use a representative sample/superset).
     :param columns: columns to plan (if None, plan all columns).
@@ -128,8 +162,9 @@ def apply_cleaning_plan(df: pl.DataFrame, plan: Dict[str, str], optimize: bool =
     :return: cleaned DataFrame.
     """
     exprs = []
+    schema = df.schema
     for column, kind in plan.items():
-        if column not in df.columns or kind == "keep":
+        if column not in schema or kind == "keep":
             continue
         if kind == "boolean":
             exprs.append(PolarsParser.parse_boolean_expr(column).cast(pl.Boolean, strict=False).alias(column))
@@ -140,7 +175,7 @@ def apply_cleaning_plan(df: pl.DataFrame, plan: Dict[str, str], optimize: bool =
         elif kind == "datetime":
             exprs.append(PolarsParser.parse_date_expr(column).alias(column))
         elif kind == "utf8":
-            exprs.append(pl.col(column).cast(pl.Utf8, strict=False).alias(column))
+            exprs.append(pl.col(column).cast(pl.String, strict=False).alias(column))
 
     if exprs:
         df = df.with_columns(exprs)
