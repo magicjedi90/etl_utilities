@@ -35,7 +35,7 @@ def standardize_column_name(name) -> str:
             .replace('?', '').replace('(', '').replace(')', '')
             .replace('\\', '').replace(',', '').replace('/', '')
             .replace('\'', '').replace('#', 'Num').replace('$', 'Dollars')
-            .replace('&', 'And'))
+            .replace('&', 'And').replace('%', 'Percent'))
     name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
     name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
     return (name.replace('.', '_').replace(':', '_').replace(' ', '_')
