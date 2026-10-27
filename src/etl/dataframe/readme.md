@@ -173,7 +173,7 @@ print(int_value)
 `etl.dataframe.polars` provides `PolarsCleaner` and `PolarsParser`. The one-shot methods
 mirror the Pandas `Cleaner` — `column_names_to_snake_case`, `clean_numbers`, `clean_dates`,
 `clean_bools`, `clean_all_types`, `clean_df`, `coalesce_columns`, `generate_hash_column`,
-`optimize_dtypes` — but operate on `polars.DataFrame` using Polars expressions.
+`optimize_dtypes` — but operate on Polars frames using Polars expressions.
 
 ```python
 import polars as pl
@@ -183,6 +183,26 @@ df = pl.read_csv("export.csv")
 df = PolarsCleaner.column_names_to_snake_case(df)
 df = PolarsCleaner.clean_df(df)            # one-shot: drop empty columns + infer types
 ```
+
+### LazyFrames
+
+Every `PolarsCleaner` method accepts a `pl.LazyFrame` as well as a `pl.DataFrame` and returns
+the same kind, so files larger than memory can be cleaned end to end:
+
+```python
+lf = pl.scan_parquet("exports/*.parquet")
+lf = PolarsCleaner.column_names_to_snake_case(lf)
+PolarsCleaner.clean_df(lf).sink_parquet("clean.parquet")
+```
+
+- Pure transforms (renames, `apply_cleaning_plan`, `sanitize_float_columns`,
+  `localize_naive_datetimes`, `cast_null_columns`, `coalesce_columns`, `generate_hash_column`,
+  `clean_*` with named `columns`) never execute the LazyFrame.
+- Methods that decide from the data (`clean_df`, `clean_all_types`, `infer_cleaning_plan`,
+  `optimize_dtypes`, `clean_*` with `columns=None`) run **one** streaming aggregation query and
+  return a frame that is still lazy — the same way `pl.scan_csv` reads rows to infer a schema.
+  The source is therefore read twice: once to infer, once when you collect/sink. If the
+  upstream plan is expensive (joins, remote scans), `.collect()` or `.cache()` it first.
 
 ### Batch-safe / streaming API
 
@@ -195,6 +215,14 @@ plan = PolarsCleaner.infer_cleaning_plan(sample_df, prefer_float=True)
 for batch in stream:
     batch = PolarsCleaner.apply_cleaning_plan(batch, plan)   # identical schema every time
     sink.write(batch)
+```
+
+With LazyFrames, infer once over every file and apply the plan to each file's scan:
+
+```python
+plan = PolarsCleaner.infer_cleaning_plan(pl.scan_parquet(paths), prefer_float=True)
+for path in paths:
+    PolarsCleaner.apply_cleaning_plan(pl.scan_parquet(path), plan).sink_parquet(out_dir / path.name)
 ```
 
 - `infer_cleaning_plan(df, columns=None, threshold=1.0, prefer_float=False)` returns a

@@ -12,6 +12,12 @@ The implementations live in focused, independently-importable modules:
 `PolarsCleaner` re-exposes them as static methods so the historical
 ``PolarsCleaner.clean_df(df)`` style API keeps working unchanged. New code may
 call the module functions directly.
+
+Every method accepts a ``pl.DataFrame`` or a ``pl.LazyFrame`` and returns the
+same kind. Pure transforms (renames, plan application, schema stabilizers)
+never execute a LazyFrame; methods that decide from the data (clean_df,
+clean_all_types, infer_cleaning_plan, optimize_dtypes, clean_* with
+columns=None) run exactly one aggregation query and return a still-lazy frame.
 """
 from .cleaning_plan import apply_cleaning_plan, infer_cleaning_plan
 from .column_names import column_names_to_pascal_case, column_names_to_snake_case
@@ -33,9 +39,9 @@ from .type_cleaning import (
 
 class PolarsCleaner:
     """
-    Static-method facade for data cleaning operations on a Polars DataFrame.
-    Optimized for Polars' lazy evaluation and expression system. Each method
-    delegates to a function in one of the sibling modules listed above.
+    Static-method facade for data cleaning operations on a Polars DataFrame or
+    LazyFrame, built on Polars expressions. Each method delegates to a function
+    in one of the sibling modules listed above.
     """
 
     # column-name normalization

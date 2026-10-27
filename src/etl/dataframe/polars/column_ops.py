@@ -1,16 +1,17 @@
 # src/etl/dataframe/polars/column_ops.py
-"""Column-deriving operations for Polars DataFrames: coalesce and hashing."""
+"""Column-deriving operations for Polars frames: coalesce and hashing."""
 from typing import List
 
 import polars as pl
 
 from ..common.utils import compute_hash
+from ._frame import FrameT
 
 
-def coalesce_columns(df: pl.DataFrame, columns_to_coalesce: List[str], target_column: str, drop: bool = False) -> pl.DataFrame:
+def coalesce_columns(df: FrameT, columns_to_coalesce: List[str], target_column: str, drop: bool = False) -> FrameT:
     """
     Coalesce multiple columns into one, taking the first non-null value.
-    :param df: Polars DataFrame
+    :param df: Polars DataFrame or LazyFrame
     :param columns_to_coalesce: List of column names to coalesce
     :param target_column: Name for the coalesced column
     :param drop: Whether to drop the original columns
@@ -28,18 +29,18 @@ def coalesce_columns(df: pl.DataFrame, columns_to_coalesce: List[str], target_co
 
 
 def generate_hash_column(
-    df: pl.DataFrame,
+    df: FrameT,
     columns_to_hash: List[str],
     new_column_name: str,
     algorithm: str = "sha1",
     separator: str = "",
-) -> pl.DataFrame:
+) -> FrameT:
     """
     Generate a hash column based on specified columns.
 
     Null components hash as the empty string, so a row is never given a null
     hash just because one of its inputs is null.
-    :param df: Polars DataFrame
+    :param df: Polars DataFrame or LazyFrame
     :param columns_to_hash: List of column names to include in hash
     :param new_column_name: Name for the new hash column
     :param algorithm: "sha1" (default) keeps the row-wise cryptographic SHA-1 hex
@@ -57,11 +58,12 @@ def generate_hash_column(
     if not columns_to_hash:
         raise ValueError("columns_to_hash cannot be empty")
 
-    missing_cols = [col for col in columns_to_hash if col not in df.columns]
+    columns = df.collect_schema().names()
+    missing_cols = [col for col in columns_to_hash if col not in columns]
     if missing_cols:
         raise ValueError(f"Columns not found in DataFrame: {missing_cols}")
 
-    if new_column_name in df.columns:
+    if new_column_name in columns:
         raise ValueError(f"Column '{new_column_name}' already exists in DataFrame")
 
     concat = pl.concat_str(

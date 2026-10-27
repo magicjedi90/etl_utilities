@@ -7,14 +7,20 @@ Splitting inference from application fixes that: infer_cleaning_plan() on a
 representative sample, then apply_cleaning_plan() on each batch so every batch
 lands on the same schema.
 
+Both accept a DataFrame or a LazyFrame. On a LazyFrame (e.g. pl.scan_parquet),
+inference runs one streaming aggregation query and apply_cleaning_plan stays
+fully lazy, so scan -> infer -> apply -> sink_parquet never holds the data in
+memory.
+
 This module owns the type-inference decision logic. clean_all_types() in
 type_cleaning.py is the one-shot wrapper — it infers a plan and applies it to
 the same frame — so the in-memory and batch/streaming paths cannot drift.
 """
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import polars as pl
 
+from ._frame import FrameT, collect_row
 from .parser import PolarsParser
 from .schema_tools import optimize_dtypes
 
@@ -46,11 +52,18 @@ def effective_non_null_expr(column: str) -> pl.Expr:
     return pl.when(stripped == "").then(None).otherwise(original).is_not_null()
 
 
-def _probe_count_exprs(column: str) -> List[pl.Expr]:
-    """Aggregation expressions probing one column's bool/num/date parseability."""
+def _probe_count_exprs(column: str, with_range: bool = False) -> List[pl.Expr]:
+    """Aggregation expressions probing one column's bool/num/date parseability.
+
+    with_range adds the parsed numeric min/max (<col>__min/__max) so an int64
+    column can be narrowed (schema_tools._narrow_int_casts) without rescanning.
+    That only pays off on a LazyFrame, where a rescan re-runs the parse from the
+    source; the extra aggregations re-evaluate the parse (~20% probe cost), so
+    eager callers narrow the already-cast columns with optimize_dtypes instead.
+    """
     float_expr = PolarsParser.parse_float_expr(column)
     int_safe = (float_expr.round(0) == float_expr) & (float_expr.abs() < _INT64_LIMIT)
-    return [
+    exprs = [
         effective_non_null_expr(column).sum().alias(f"{column}__orig"),
         PolarsParser.parse_boolean_expr(column).is_not_null().sum().alias(f"{column}__bool"),
         float_expr.is_not_null().sum().alias(f"{column}__num"),
@@ -58,6 +71,9 @@ def _probe_count_exprs(column: str) -> List[pl.Expr]:
         # int64 is only safe when every parsed value is whole AND in Int64 range
         int_safe.fill_null(True).all().alias(f"{column}__int_safe"),
     ]
+    if with_range:
+        exprs += [float_expr.min().alias(f"{column}__min"), float_expr.max().alias(f"{column}__max")]
+    return exprs
 
 
 def _decide_kind(counts: Dict, column: str, threshold: float, prefer_float: bool) -> str:
@@ -83,32 +99,39 @@ def _decide_kind(counts: Dict, column: str, threshold: float, prefer_float: bool
 
 
 def _infer_plan_with_counts(
-    df: pl.DataFrame,
+    df: pl.DataFrame | pl.LazyFrame,
     columns: List[str],
     threshold: float,
     prefer_float: bool,
+    extra_exprs: Sequence[pl.Expr] = (),
+    with_ranges: bool = False,
 ) -> Tuple[Dict[str, str], Dict]:
-    """Infer a plan in a single scan; also return the raw probe counts (for logging).
+    """Infer a plan in a single scan; also return the raw probe counts.
 
     Columns that already carry a numeric/boolean/temporal dtype are planned as
-    "keep" without probing (see is_already_typed).
+    "keep" without probing (see is_already_typed). `extra_exprs` are evaluated
+    in the same scan and their results returned in the counts, so callers that
+    need more stats (null counts, Int64 ranges) don't re-read the frame.
+    `with_ranges` adds each probed column's numeric min/max (see _probe_count_exprs).
     """
-    if not columns:
-        return {}, {}
-    schema = df.schema
+    schema = df.collect_schema()
     plan: Dict[str, str] = {column: "keep" for column in columns if is_already_typed(schema[column])}
+    # A Null-dtype column has nothing to parse, but probing it still pushes a
+    # full column through every date format — plan it as "keep" from the schema.
+    empty = [column for column in columns if schema[column] == pl.Null]
+    plan.update({column: "keep" for column in empty})
     probe_columns = [column for column in columns if column not in plan]
-    counts: Dict = {}
-    if probe_columns:
-        count_exprs = [expr for column in probe_columns for expr in _probe_count_exprs(column)]
-        counts = df.select(count_exprs).row(0, named=True)
-        plan.update({column: _decide_kind(counts, column, threshold, prefer_float) for column in probe_columns})
+    count_exprs = [expr for column in probe_columns for expr in _probe_count_exprs(column, with_ranges)]
+    count_exprs.extend(extra_exprs)
+    counts: Dict = collect_row(df, count_exprs) if count_exprs else {}
+    counts.update({f"{column}__orig": 0 for column in empty})
+    plan.update({column: _decide_kind(counts, column, threshold, prefer_float) for column in probe_columns})
     # Preserve caller order
     return {column: plan[column] for column in columns}, counts
 
 
 def infer_cleaning_plan(
-    df: pl.DataFrame,
+    df: pl.DataFrame | pl.LazyFrame,
     columns: Optional[List[str]] = None,
     threshold: float = 1.0,
     prefer_float: bool = False,
@@ -128,7 +151,9 @@ def infer_cleaning_plan(
     Numeric columns are "int64" only when every value is whole and inside the
     Int64 range; otherwise "float64".
 
-    :param df: Polars DataFrame to infer from (use a representative sample/superset).
+    :param df: Polars DataFrame or LazyFrame to infer from (use a representative
+        sample/superset). A LazyFrame is executed once, as a streaming
+        aggregation — pass e.g. lf.head(n) to infer from a sample.
     :param columns: columns to plan (if None, plan all columns).
     :param threshold: fraction of meaningful values a parser must cover to win
         (1.0 == all-or-nothing; lower to be more aggressive).
@@ -137,12 +162,12 @@ def infer_cleaning_plan(
     :return: dict mapping column name to target dtype kind.
     """
     if columns is None:
-        columns = df.columns
+        columns = df.collect_schema().names()
     plan, _ = _infer_plan_with_counts(df, columns, threshold, prefer_float)
     return plan
 
 
-def apply_cleaning_plan(df: pl.DataFrame, plan: Dict[str, str], optimize: bool = False) -> pl.DataFrame:
+def apply_cleaning_plan(df: FrameT, plan: Dict[str, str], optimize: bool = False) -> FrameT:
     """
     Apply a plan from infer_cleaning_plan() deterministically.
 
@@ -155,14 +180,16 @@ def apply_cleaning_plan(df: pl.DataFrame, plan: Dict[str, str], optimize: bool =
     silently. For streaming where later batches may diverge, infer with
     prefer_float=True (or infer on a representative superset).
 
-    :param df: Polars DataFrame (typically one batch of a stream).
+    :param df: Polars DataFrame or LazyFrame (typically one batch of a stream).
+        A LazyFrame is not executed — the casts are added to its plan.
     :param plan: column -> dtype kind, from infer_cleaning_plan().
     :param optimize: when True, downcast Int64 columns via optimize_dtypes. Leave
         False for batch stability (optimize is per-frame and breaks schema parity).
-    :return: cleaned DataFrame.
+        On a LazyFrame this runs one min/max aggregation query.
+    :return: cleaned frame, the same kind as the input.
     """
     exprs = []
-    schema = df.schema
+    schema = df.collect_schema()
     for column, kind in plan.items():
         if column not in schema or kind == "keep":
             continue
